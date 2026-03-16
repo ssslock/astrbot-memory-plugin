@@ -173,6 +173,9 @@ class MyPlugin(Star):
     async def upload_to_ai_memory(self, event: AstrMessageEvent, relative_path: str) -> str:
         """Upload a file to the "ai-memory" knowledge base
         
+        Before uploading, this tool will delete any existing documents in the knowledge base
+        that have the same name as the file being uploaded.
+        
         Args:
             relative_path (string): The relative file path to upload. The file must exist in the plugin's data directory.
             
@@ -206,6 +209,21 @@ class MyPlugin(Star):
             file_type = full_path.suffix.lstrip('.').lower()
             if not file_type:
                 file_type = "txt"  # Default to text if no extension
+            
+            # First, list all existing documents and delete those with the same name
+            try:
+                existing_docs = await kb_helper.list_documents()
+                deleted_count = 0
+                for doc in existing_docs:
+                    if doc.doc_name == file_name:
+                        await kb_helper.delete_document(doc.doc_id)
+                        deleted_count += 1
+                        logger.info(f"Deleted existing document with name '{file_name}' (ID: {doc.doc_id})")
+                
+                if deleted_count > 0:
+                    logger.info(f"Deleted {deleted_count} existing document(s) with the same name before upload")
+            except Exception as list_error:
+                logger.warning(f"Error while listing/deleting existing documents: {list_error}. Continuing with upload...")
             
             # Upload the document
             try:
