@@ -28,12 +28,52 @@ class MyPlugin(Star):
         self.plugin_data_path.mkdir(parents=True, exist_ok=True)
         logger.info(f"Plugin data path: {self.plugin_data_path}")
 
+        # Monkey-patch _ensure_persona_and_skills in astr_main_agent
+        try:
+            import astrbot.core.astr_main_agent as astr_main_agent
+            self._patched_module = astr_main_agent
+            self._original_ensure_persona_and_skills = astr_main_agent._ensure_persona_and_skills
+            
+            async def patched_ensure_persona_and_skills(req, cfg, plugin_context, event):
+                # Call original function first
+                await self._original_ensure_persona_and_skills(req, cfg, plugin_context, event)
+                
+                # Get self prompt file path using the tool
+                try:
+                    file_path_result = await self.get_self_prompt_file_path(event)
+                    if file_path_result.startswith("Error:"):
+                        logger.warning(f"Could not get self prompt file path: {file_path_result}")
+                        return
+                    file_path = file_path_result
+                    
+                    # Try to read the file
+                    import os
+                    if os.path.exists(file_path):
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            content = f.read().strip()
+                        if content:
+                            # Append to system prompt
+                            if req.system_prompt is None:
+                                req.system_prompt = ""
+                            req.system_prompt += f"\n# Self Instructions\n\n{content}\n"
+                            logger.info(f"Appended self instructions from {file_path}")
+                    else:
+                        logger.info(f"Self prompt file {file_path} does not exist, skipping")
+                except Exception as e:
+                    logger.error(f"Error in patched _ensure_persona_and_skills: {e}")
+            
+            # Replace the function in the module
+            astr_main_agent._ensure_persona_and_skills = patched_ensure_persona_and_skills
+            logger.info("Monkey-patched _ensure_persona_and_skills successfully")
+        except Exception as e:
+            logger.error(f"Failed to monkey-patch _ensure_persona_and_skills: {e}")
+
     async def terminate(self):
         """可选择实现异步的插件销毁方法，当插件被卸载/停用时会调用。"""
         # Restore the original function
-        if hasattr(self, '_patched_module') and self._patched_module is not None and hasattr(self, '_original_append_system_reminders') and self._original_append_system_reminders is not None:
-            self._patched_module._append_system_reminders = self._original_append_system_reminders
-            logger.info("Restored original _append_system_reminders")
+        if hasattr(self, '_patched_module') and self._patched_module is not None and hasattr(self, '_original_ensure_persona_and_skills'):
+            self._patched_module._ensure_persona_and_skills = self._original_ensure_persona_and_skills
+            logger.info("Restored original _ensure_persona_and_skills")
 
     @llm_tool(name="store_memory")
     async def store_memory(self, event: AstrMessageEvent, relative_path: str, content: str) -> str:
@@ -167,6 +207,25 @@ class MyPlugin(Star):
             return result
         except Exception as e:
             logger.error(f"Error listing files: {e}")
+            return f"Error: {str(e)}"
+
+    @llm_tool(name="get_self_prompt_file_path")
+    async def get_self_prompt_file_path(self, event: AstrMessageEvent) -> str:
+        """Get the path to the self prompt file for the current bot.
+        
+        Returns:
+            string: The file path (bot's self_id + ".md")
+        """
+        try:
+            # Get the bot's self_id from the message object
+            self_id = event.message_obj.self_id
+            if not self_id:
+                return "Error: Could not retrieve bot self_id"
+            file_path = f"{self_id}.md"
+            logger.info(f"Self prompt file path: {file_path}")
+            return file_path
+        except Exception as e:
+            logger.error(f"Error getting self prompt file path: {e}")
             return f"Error: {str(e)}"
 
     @llm_tool(name="upload_to_ai_memory")
