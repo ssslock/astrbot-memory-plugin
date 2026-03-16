@@ -70,7 +70,7 @@ class MyPlugin(Star):
                     logger.error(f"Error in patched _ensure_persona_and_skills: {e}")
             
             # Replace the function in the module
-            astr_main_agent._ensure_persona_and_skills = patched_ensure_persona_and_skills
+            # astr_main_agent._ensure_persona_and_skills = patched_ensure_persona_and_skills
             logger.info("Monkey-patched _ensure_persona_and_skills successfully")
         except Exception as e:
             logger.error(f"Failed to monkey-patch _ensure_persona_and_skills: {e}")
