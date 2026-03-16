@@ -40,27 +40,32 @@ class MyPlugin(Star):
                 
                 # Get self prompt file path using the helper
                 try:
-                    file_path = self._get_self_prompt_file_path(event)
-                    if file_path is None:
+                    # Ensure the relative path is safe
+                    relative_path = self._get_self_prompt_file_path(event)
+                    if relative_path is None:
                         logger.warning("Could not get self prompt file path: self_id not found")
                         return
                     
-                    # Resolve to absolute path
-                    import os
-                    abs_file_path = os.path.abspath(file_path)
+                    full_path = (self.plugin_data_path / relative_path).resolve()
+                    # Ensure the full path is within plugin_data_path
+                    if not str(full_path).startswith(str(self.plugin_data_path.resolve())):
+                        return "Error: Invalid path - cannot store outside plugin data directory"
+                    
+                    # Create parent directories if they don't exist
+                    full_path.parent.mkdir(parents=True, exist_ok=True)
                     
                     # Try to read the file
-                    if os.path.exists(abs_file_path):
-                        with open(abs_file_path, 'r', encoding='utf-8') as f:
+                    if os.path.exists(full_path):
+                        with open(full_path, 'r', encoding='utf-8') as f:
                             content = f.read().strip()
                         if content:
                             # Append to system prompt
                             if req.system_prompt is None:
                                 req.system_prompt = ""
                             req.system_prompt += f"\n# Self Instructions\n\n{content}\n"
-                            logger.info(f"Appended self instructions from {abs_file_path}")
+                            logger.info(f"Appended self instructions from {full_path}")
                     else:
-                        logger.info(f"Self prompt file {abs_file_path} does not exist, skipping")
+                        logger.info(f"Self prompt file {full_path} does not exist, skipping")
                 except Exception as e:
                     logger.error(f"Error in patched _ensure_persona_and_skills: {e}")
             
