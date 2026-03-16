@@ -93,3 +93,78 @@ class MyPlugin(Star):
         except Exception as e:
             logger.error(f"Error retrieving file: {e}")
             return f"Error: {str(e)}"
+
+    @llm_tool(name="delete_file")
+    async def delete_file(self, event: AstrMessageEvent, relative_path: str) -> str:
+        """Delete a file at a relative path within the plugin's data directory.
+        
+        Args:
+            relative_path (string): The relative file path to delete.
+            
+        Returns:
+            string: "deleted" if successfully deleted, "not found" if file doesn't exist, or an error message.
+        """
+        try:
+            full_path = (self.plugin_data_path / relative_path).resolve()
+            # Ensure the full path is within plugin_data_path
+            if not str(full_path).startswith(str(self.plugin_data_path.resolve())):
+                return "Error: Invalid path - cannot access outside plugin data directory"
+            
+            if full_path.exists() and full_path.is_file():
+                full_path.unlink()
+                logger.info(f"Deleted file: {full_path}")
+                return "deleted"
+            else:
+                logger.info(f"File not found for deletion: {full_path}")
+                return "not found"
+        except Exception as e:
+            logger.error(f"Error deleting file: {e}")
+            return f"Error: {str(e)}"
+
+    @llm_tool(name="list_files")
+    async def list_files(self, event: AstrMessageEvent, relative_path: str = ".") -> str:
+        """List files and folders at a relative path within the plugin's data directory.
+        
+        Args:
+            relative_path (string): The relative directory path to list. Defaults to current directory.
+            
+        Returns:
+            string: A formatted list of entries with type (file/folder) and file size for files.
+                    Returns "not found" if the directory doesn't exist, or an error message.
+        """
+        try:
+            full_path = (self.plugin_data_path / relative_path).resolve()
+            # Ensure the full path is within plugin_data_path
+            if not str(full_path).startswith(str(self.plugin_data_path.resolve())):
+                return "Error: Invalid path - cannot access outside plugin data directory"
+            
+            if not full_path.exists():
+                logger.info(f"Directory not found: {full_path}")
+                return "not found"
+            
+            if not full_path.is_dir():
+                return "Error: Path is not a directory"
+            
+            entries = []
+            for item in full_path.iterdir():
+                if item.is_file():
+                    try:
+                        size = item.stat().st_size
+                        entries.append(f"file: {item.name} ({size} bytes)")
+                    except Exception as e:
+                        entries.append(f"file: {item.name} (error getting size: {e})")
+                elif item.is_dir():
+                    entries.append(f"folder: {item.name}")
+                else:
+                    entries.append(f"other: {item.name}")
+            
+            if not entries:
+                result = "empty directory"
+            else:
+                result = "\n".join(entries)
+            
+            logger.info(f"Listed files in: {full_path}, count: {len(entries)}")
+            return result
+        except Exception as e:
+            logger.error(f"Error listing files: {e}")
+            return f"Error: {str(e)}"
