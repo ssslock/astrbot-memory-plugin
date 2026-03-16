@@ -36,7 +36,7 @@ class MyPlugin(Star):
             logger.info("Restored original _append_system_reminders")
 
     @llm_tool(name="store_memroy")
-    async def store_file(self, event: AstrMessageEvent, relative_path: str, content: str) -> str:
+    async def store_memroy(self, event: AstrMessageEvent, relative_path: str, content: str) -> str:
         """Store memory content with a relative file path
         
         Args:
@@ -68,7 +68,7 @@ class MyPlugin(Star):
             return f"Error: {str(e)}"
 
     @llm_tool(name="retrieve_memory")
-    async def retrieve_file(self, event: AstrMessageEvent, relative_path: str) -> str:
+    async def retrieve_memory(self, event: AstrMessageEvent, relative_path: str) -> str:
         """Retrieve stored memory content with a relative file path
         
         Args:
@@ -95,7 +95,7 @@ class MyPlugin(Star):
             return f"Error: {str(e)}"
 
     @llm_tool(name="remove_memory")
-    async def remove_file(self, event: AstrMessageEvent, relative_path: str) -> str:
+    async def remove_memory(self, event: AstrMessageEvent, relative_path: str) -> str:
         """Remove memory content with a relative file path
         
         Args:
@@ -122,7 +122,7 @@ class MyPlugin(Star):
             return f"Error: {str(e)}"
 
     @llm_tool(name="list_memory")
-    async def list_files(self, event: AstrMessageEvent, relative_path: str = ".") -> str:
+    async def list_memory(self, event: AstrMessageEvent, relative_path: str = ".") -> str:
         """List stored memory entries in a directory with a relative path
         
         Args:
