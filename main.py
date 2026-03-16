@@ -75,7 +75,7 @@ class MyPlugin(Star):
             relative_path (string): The relative file path to retrieve.
             
         Returns:
-            string: The stored file name and content length if found, or "not found" if it does not exist.
+            string: The stored file name and content if found, or "not found" if it does not exist.
         """
         try:
             full_path = (self.plugin_data_path / relative_path).resolve()
@@ -86,7 +86,7 @@ class MyPlugin(Star):
             if full_path.exists() and full_path.is_file():
                 content = full_path.read_text(encoding='utf-8')
                 logger.info(f"Retrieved file: {full_path}, content length: {len(content)}")
-                return f"File: {relative_path}, Content length: {len(content)}"
+                return f"File: {relative_path}, Content: {content}"
             else:
                 logger.info(f"File not found: {full_path}")
                 return "not found"
