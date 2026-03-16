@@ -190,6 +190,8 @@ class MyPlugin(Star):
             if not str(full_path).startswith(str(self.plugin_data_path.resolve())):
                 return "Error: Invalid path - cannot access outside plugin data directory"
             
+            file_name = full_path.name
+            
             # Get the knowledge base manager from context
             if not hasattr(self.context, 'kb_manager'):
                 return "Error: Knowledge base manager not available"
@@ -222,7 +224,6 @@ class MyPlugin(Star):
             
             # Read file content as bytes
             file_content = full_path.read_bytes()
-            file_name = full_path.name
             
             # Determine file type from extension
             file_type = full_path.suffix.lstrip('.').lower()
