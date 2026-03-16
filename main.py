@@ -38,13 +38,12 @@ class MyPlugin(Star):
                 # Call original function first
                 await self._original_ensure_persona_and_skills(req, cfg, plugin_context, event)
                 
-                # Get self prompt file path using the tool
+                # Get self prompt file path using the helper
                 try:
-                    file_path_result = await self.get_self_prompt_file_path(event)
-                    if file_path_result.startswith("Error:"):
-                        logger.warning(f"Could not get self prompt file path: {file_path_result}")
+                    file_path = self._get_self_prompt_file_path(event)
+                    if file_path is None:
+                        logger.warning("Could not get self prompt file path: self_id not found")
                         return
-                    file_path = file_path_result
                     
                     # Try to read the file
                     import os
@@ -209,9 +208,8 @@ class MyPlugin(Star):
             logger.error(f"Error listing files: {e}")
             return f"Error: {str(e)}"
 
-    @llm_tool(name="get_self_prompt_file_path")
-    async def get_self_prompt_file_path(self, event: AstrMessageEvent) -> str:
-        """Get the path to the self prompt file for the current bot.
+    def _get_self_prompt_file_path(self, event: AstrMessageEvent) -> str:
+        """Helper function to get the path to the self prompt file for the current bot.
         
         Returns:
             string: The file path (bot's self_id + ".md")
@@ -220,13 +218,25 @@ class MyPlugin(Star):
             # Get the bot's self_id from the message object
             self_id = event.message_obj.self_id
             if not self_id:
-                return "Error: Could not retrieve bot self_id"
+                return None
             file_path = f"{self_id}.md"
-            logger.info(f"Self prompt file path: {file_path}")
             return file_path
         except Exception as e:
             logger.error(f"Error getting self prompt file path: {e}")
-            return f"Error: {str(e)}"
+            return None
+
+    @llm_tool(name="get_self_prompt_file_path")
+    async def get_self_prompt_file_path(self, event: AstrMessageEvent) -> str:
+        """Get the path to the self prompt file for the current bot.
+        
+        Returns:
+            string: The file path (bot's self_id + ".md") or an error message
+        """
+        file_path = self._get_self_prompt_file_path(event)
+        if file_path is None:
+            return "Error: Could not retrieve bot self_id"
+        logger.info(f"Self prompt file path: {file_path}")
+        return file_path
 
     @llm_tool(name="upload_to_ai_memory")
     async def upload_to_ai_memory(self, event: AstrMessageEvent, relative_path: str) -> str:
