@@ -35,9 +35,9 @@ class MyPlugin(Star):
             self._patched_module._append_system_reminders = self._original_append_system_reminders
             logger.info("Restored original _append_system_reminders")
 
-    @llm_tool(name="store_file")
+    @llm_tool(name="store_memroy")
     async def store_file(self, event: AstrMessageEvent, relative_path: str, content: str) -> str:
-        """Store file content at a relative path under the plugin's data directory.
+        """Store memory content with a relative file path
         
         Args:
             relative_path (string): The relative file path where the content should be stored.
@@ -67,9 +67,9 @@ class MyPlugin(Star):
             logger.error(f"Error storing file: {e}")
             return f"Error: {str(e)}"
 
-    @llm_tool(name="retrieve_file")
+    @llm_tool(name="retrieve_memory")
     async def retrieve_file(self, event: AstrMessageEvent, relative_path: str) -> str:
-        """Retrieve stored file content by relative path.
+        """Retrieve stored memory content with a relative file path
         
         Args:
             relative_path (string): The relative file path to retrieve.
@@ -94,9 +94,9 @@ class MyPlugin(Star):
             logger.error(f"Error retrieving file: {e}")
             return f"Error: {str(e)}"
 
-    @llm_tool(name="delete_file")
-    async def delete_file(self, event: AstrMessageEvent, relative_path: str) -> str:
-        """Delete a file at a relative path within the plugin's data directory.
+    @llm_tool(name="remove_memory")
+    async def remove_file(self, event: AstrMessageEvent, relative_path: str) -> str:
+        """Remove memory content with a relative file path
         
         Args:
             relative_path (string): The relative file path to delete.
@@ -121,9 +121,9 @@ class MyPlugin(Star):
             logger.error(f"Error deleting file: {e}")
             return f"Error: {str(e)}"
 
-    @llm_tool(name="list_files")
+    @llm_tool(name="list_memory")
     async def list_files(self, event: AstrMessageEvent, relative_path: str = ".") -> str:
-        """List files and folders at a relative path within the plugin's data directory.
+        """List stored memory entries in a directory with a relative path
         
         Args:
             relative_path (string): The relative directory path to list. Defaults to current directory.
