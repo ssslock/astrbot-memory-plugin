@@ -171,26 +171,24 @@ class MyPlugin(Star):
 
     @llm_tool(name="upload_to_ai_memory")
     async def upload_to_ai_memory(self, event: AstrMessageEvent, relative_path: str) -> str:
-        """Upload a file to the "ai-memory" knowledge base
+        """Upload or Delete a memory entry to the "ai-memory" knowledge base
         
-        Before uploading, this tool will delete any existing documents in the knowledge base
-        that have the same name as the file being uploaded.
-        
+        Before uploading, this tool will delete any existing documents in the knowledge base that have the same path as the memory entry being uploaded.
+        To delete a memory entry from the knowledge base, remove the local memory entry first then invoke this tool using the with the same path, the tool will attempt to delete any document with the same path in the knowledge base and return a message suggesting file not found.
+
         Args:
             relative_path (string): The relative file path to upload. The file must exist in the plugin's data directory.
             
         Returns:
-            string: "OK" if successful, otherwise an error message.
+            string: execution details when successful, otherwise an error message.
         """
         try:
+            response = ""
+
             # Get the full path and ensure it's within plugin data directory
             full_path = (self.plugin_data_path / relative_path).resolve()
             if not str(full_path).startswith(str(self.plugin_data_path.resolve())):
                 return "Error: Invalid path - cannot access outside plugin data directory"
-            
-            # Check if file exists
-            if not full_path.exists() or not full_path.is_file():
-                return f"Error: File not found at {relative_path}"
             
             # Get the knowledge base manager from context
             if not hasattr(self.context, 'kb_manager'):
@@ -200,15 +198,6 @@ class MyPlugin(Star):
             kb_helper = await self.context.kb_manager.get_kb_by_name("ai-memory")
             if not kb_helper:
                 return "Error: 'ai-memory' knowledge base not found. Please ensure it exists and is properly configured."
-            
-            # Read file content as bytes
-            file_content = full_path.read_bytes()
-            file_name = full_path.name
-            
-            # Determine file type from extension
-            file_type = full_path.suffix.lstrip('.').lower()
-            if not file_type:
-                file_type = "txt"  # Default to text if no extension
             
             # First, list all existing documents and delete those with the same name
             try:
@@ -222,8 +211,24 @@ class MyPlugin(Star):
                 
                 if deleted_count > 0:
                     logger.info(f"Deleted {deleted_count} existing document(s) with the same name before upload")
+                    response += f"Deleted {deleted_count} existing document(s) with the same name before upload. "
             except Exception as list_error:
                 logger.warning(f"Error while listing/deleting existing documents: {list_error}. Continuing with upload...")
+            
+            # Check if file exists
+            if not full_path.exists() or not full_path.is_file():
+                response += f"File not found at {relative_path} when attempting to upload."
+                return response
+            
+            # Read file content as bytes
+            file_content = full_path.read_bytes()
+            file_name = full_path.name
+            
+            # Determine file type from extension
+            file_type = full_path.suffix.lstrip('.').lower()
+            if not file_type:
+                file_type = "txt"  # Default to text if no extension
+
             
             # Upload the document
             try:
@@ -231,7 +236,7 @@ class MyPlugin(Star):
                     file_name=file_name,
                     file_content=file_content,
                     file_type=file_type,
-                    chunk_size=512,  # Default values
+                    chunk_size=1024,  # Default values
                     chunk_overlap=50,
                     batch_size=32,
                     tasks_limit=3,
@@ -240,11 +245,11 @@ class MyPlugin(Star):
                     pre_chunked_text=None,
                 )
                 logger.info(f"Successfully uploaded {file_name} to ai-memory knowledge base. Document ID: {doc.doc_id}")
-                return f"OK: Uploaded {file_name} to ai-memory knowledge base. Document ID: {doc.doc_id}"
+                return response + f"OK: Uploaded {file_name} to ai-memory knowledge base. Document ID: {doc.doc_id}"
             except Exception as upload_error:
                 logger.error(f"Error uploading document: {upload_error}")
-                return f"Error uploading document: {str(upload_error)}"
+                return response + f"Error uploading document: {str(upload_error)}"
                 
         except Exception as e:
             logger.error(f"Error in upload_to_ai_memory: {e}")
-            return f"Error: {str(e)}"
+            return response + f"Error: {str(e)}"
