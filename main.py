@@ -45,19 +45,22 @@ class MyPlugin(Star):
                         logger.warning("Could not get self prompt file path: self_id not found")
                         return
                     
-                    # Try to read the file
+                    # Resolve to absolute path
                     import os
-                    if os.path.exists(file_path):
-                        with open(file_path, 'r', encoding='utf-8') as f:
+                    abs_file_path = os.path.abspath(file_path)
+                    
+                    # Try to read the file
+                    if os.path.exists(abs_file_path):
+                        with open(abs_file_path, 'r', encoding='utf-8') as f:
                             content = f.read().strip()
                         if content:
                             # Append to system prompt
                             if req.system_prompt is None:
                                 req.system_prompt = ""
                             req.system_prompt += f"\n# Self Instructions\n\n{content}\n"
-                            logger.info(f"Appended self instructions from {file_path}")
+                            logger.info(f"Appended self instructions from {abs_file_path}")
                     else:
-                        logger.info(f"Self prompt file {file_path} does not exist, skipping")
+                        logger.info(f"Self prompt file {abs_file_path} does not exist, skipping")
                 except Exception as e:
                     logger.error(f"Error in patched _ensure_persona_and_skills: {e}")
             
