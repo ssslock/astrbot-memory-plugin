@@ -35,8 +35,8 @@ class MyPlugin(Star):
             self._patched_module._append_system_reminders = self._original_append_system_reminders
             logger.info("Restored original _append_system_reminders")
 
-    @llm_tool(name="store_memroy")
-    async def store_memroy(self, event: AstrMessageEvent, relative_path: str, content: str) -> str:
+    @llm_tool(name="store_memory")
+    async def store_memory(self, event: AstrMessageEvent, relative_path: str, content: str) -> str:
         """Store memory content with a relative file path
         
         Args:
@@ -167,4 +167,66 @@ class MyPlugin(Star):
             return result
         except Exception as e:
             logger.error(f"Error listing files: {e}")
+            return f"Error: {str(e)}"
+
+    @llm_tool(name="upload_to_ai_memory")
+    async def upload_to_ai_memory(self, event: AstrMessageEvent, relative_path: str) -> str:
+        """Upload a file to the "ai-memory" knowledge base
+        
+        Args:
+            relative_path (string): The relative file path to upload. The file must exist in the plugin's data directory.
+            
+        Returns:
+            string: "OK" if successful, otherwise an error message.
+        """
+        try:
+            # Get the full path and ensure it's within plugin data directory
+            full_path = (self.plugin_data_path / relative_path).resolve()
+            if not str(full_path).startswith(str(self.plugin_data_path.resolve())):
+                return "Error: Invalid path - cannot access outside plugin data directory"
+            
+            # Check if file exists
+            if not full_path.exists() or not full_path.is_file():
+                return f"Error: File not found at {relative_path}"
+            
+            # Get the knowledge base manager from context
+            if not hasattr(self.context, 'kb_manager'):
+                return "Error: Knowledge base manager not available"
+            
+            # Find the "ai-memory" knowledge base
+            kb_helper = await self.context.kb_manager.get_kb_by_name("ai-memory")
+            if not kb_helper:
+                return "Error: 'ai-memory' knowledge base not found. Please ensure it exists and is properly configured."
+            
+            # Read file content as bytes
+            file_content = full_path.read_bytes()
+            file_name = full_path.name
+            
+            # Determine file type from extension
+            file_type = full_path.suffix.lstrip('.').lower()
+            if not file_type:
+                file_type = "txt"  # Default to text if no extension
+            
+            # Upload the document
+            try:
+                doc = await kb_helper.upload_document(
+                    file_name=file_name,
+                    file_content=file_content,
+                    file_type=file_type,
+                    chunk_size=512,  # Default values
+                    chunk_overlap=50,
+                    batch_size=32,
+                    tasks_limit=3,
+                    max_retries=3,
+                    progress_callback=None,
+                    pre_chunked_text=None,
+                )
+                logger.info(f"Successfully uploaded {file_name} to ai-memory knowledge base. Document ID: {doc.doc_id}")
+                return f"OK: Uploaded {file_name} to ai-memory knowledge base. Document ID: {doc.doc_id}"
+            except Exception as upload_error:
+                logger.error(f"Error uploading document: {upload_error}")
+                return f"Error uploading document: {str(upload_error)}"
+                
+        except Exception as e:
+            logger.error(f"Error in upload_to_ai_memory: {e}")
             return f"Error: {str(e)}"
