@@ -25,9 +25,6 @@ class MyPlugin(Star):
     async def initialize(self):
         """可选择实现异步的插件初始化方法，当实例化该插件类之后会自动调用该方法。"""
         # Ensure the plugin data directory exists
-        # Ensure self.plugin_data_path is a Path object
-        if not isinstance(self.plugin_data_path, Path):
-            self.plugin_data_path = Path(str(self.plugin_data_path))
         self.plugin_data_path.mkdir(parents=True, exist_ok=True)
         logger.info(f"Plugin data path: {self.plugin_data_path}")
 
