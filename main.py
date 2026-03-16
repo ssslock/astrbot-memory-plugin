@@ -14,19 +14,20 @@ from pathlib import Path
 class MyPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
-        # Convert to Path object if get_astrbot_data_path() returns a string
+        # Always convert to Path object to ensure proper path joining
         data_path = get_astrbot_data_path()
-        if isinstance(data_path, str):
-            from pathlib import Path
-            data_path = Path(data_path)
-        self.plugin_data_path = data_path / "plugin_data" / self.name # self.name 为插件名称，在 v4.9.2 及以上版本可用，低于此版本请自行指定插件名称
+        # Convert to string first, then to Path
+        data_path = Path(str(data_path))
+        # Handle self.name which may not be available in older versions
+        plugin_name = getattr(self, 'name', 'astrbot-memory-plugin')
+        self.plugin_data_path = data_path / "plugin_data" / plugin_name
 
     async def initialize(self):
         """可选择实现异步的插件初始化方法，当实例化该插件类之后会自动调用该方法。"""
         # Ensure the plugin data directory exists
-        # Make sure self.plugin_data_path is a Path object
-        if isinstance(self.plugin_data_path, str):
-            self.plugin_data_path = Path(self.plugin_data_path)
+        # Ensure self.plugin_data_path is a Path object
+        if not isinstance(self.plugin_data_path, Path):
+            self.plugin_data_path = Path(str(self.plugin_data_path))
         self.plugin_data_path.mkdir(parents=True, exist_ok=True)
         logger.info(f"Plugin data path: {self.plugin_data_path}")
 
