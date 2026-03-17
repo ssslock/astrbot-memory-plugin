@@ -66,8 +66,6 @@ class MyPlugin(Star):
                             logger.info(f"Appended self instructions from {full_path}")
                             # Log the full system prompt
                             logger.info(f"Full system prompt after appending: {req.system_prompt}")
-                            # Log the full system prompt
-                            logger.info(f"Full system prompt after appending: {req.system_prompt}")
                     else:
                         logger.info(f"Self prompt file {full_path} does not exist, skipping")
                 except Exception as e:
