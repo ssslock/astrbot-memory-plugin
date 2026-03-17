@@ -82,6 +82,34 @@ class MyPlugin(Star):
             astr_main_agent._ensure_persona_and_skills = patched_ensure_persona_and_skills
             logger.info("Monkey-patched _ensure_persona_and_skills successfully")
             
+            # Also monkey-patch _modalities_fix to log when tools are cleared
+            self._original_modalities_fix = astr_main_agent._modalities_fix
+            
+            def patched_modalities_fix(provider: Provider, req: ProviderRequest) -> None:
+                # Log before _modalities_fix
+                if req.func_tool:
+                    before_tools = [tool.name for tool in req.func_tool.tools if hasattr(tool, 'name')]
+                    logger.info(f"Tools before _modalities_fix: {before_tools}")
+                else:
+                    logger.info("req.func_tool is None before _modalities_fix")
+                
+                # Log provider modalities
+                provider_cfg = provider.provider_config.get("modalities", ["tool_use"])
+                logger.info(f"Provider modalities: {provider_cfg}")
+                
+                # Call original function
+                self._original_modalities_fix(provider, req)
+                
+                # Log after _modalities_fix
+                if req.func_tool:
+                    after_tools = [tool.name for tool in req.func_tool.tools if hasattr(tool, 'name')]
+                    logger.info(f"Tools after _modalities_fix: {after_tools}")
+                else:
+                    logger.info("req.func_tool is None after _modalities_fix")
+            
+            astr_main_agent._modalities_fix = patched_modalities_fix
+            logger.info("Monkey-patched _modalities_fix successfully")
+            
             # Also monkey-patch _plugin_tool_fix to log tools after filtering
             self._original_plugin_tool_fix = astr_main_agent._plugin_tool_fix
             
@@ -116,6 +144,9 @@ class MyPlugin(Star):
             if hasattr(self, '_original_ensure_persona_and_skills'):
                 self._patched_module._ensure_persona_and_skills = self._original_ensure_persona_and_skills
                 logger.info("Restored original _ensure_persona_and_skills")
+            if hasattr(self, '_original_modalities_fix'):
+                self._patched_module._modalities_fix = self._original_modalities_fix
+                logger.info("Restored original _modalities_fix")
             if hasattr(self, '_original_plugin_tool_fix'):
                 self._patched_module._plugin_tool_fix = self._original_plugin_tool_fix
                 logger.info("Restored original _plugin_tool_fix")
