@@ -66,6 +66,12 @@ class MyPlugin(Star):
                             logger.info(f"Appended self instructions from {full_path}")
                             # Log the full system prompt
                             logger.info(f"Full system prompt after appending: {req.system_prompt}")
+                            # Log the tools in req.func_tool
+                            if req.func_tool is not None:
+                                tool_names = [tool.name for tool in req.func_tool.tools if hasattr(tool, 'name')]
+                                logger.info(f"Tools in req.func_tool: {tool_names}")
+                            else:
+                                logger.info("req.func_tool is None")
                     else:
                         logger.info(f"Self prompt file {full_path} does not exist, skipping")
                 except Exception as e:
@@ -354,8 +360,7 @@ class MyPlugin(Star):
             tool_list = []
             for i, tool in enumerate(active_tools, 1):
                 name = getattr(tool, 'name', 'Unknown')
-                desc = getattr(tool, 'desc', 'No description')
-                tool_list.append(f"{i}. {name}: {desc}")
+                tool_list.append(f"{i}. {name}")
             
             result = "当前可用的工具:\n" + "\n".join(tool_list)
             yield event.plain_result(result)
