@@ -2,6 +2,7 @@ from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger, llm_tool
 from astrbot.core.agent.message import TextPart
+from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 import importlib
 import inspect
