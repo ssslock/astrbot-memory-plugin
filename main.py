@@ -80,15 +80,44 @@ class MyPlugin(Star):
             # Replace the function in the module
             astr_main_agent._ensure_persona_and_skills = patched_ensure_persona_and_skills
             logger.info("Monkey-patched _ensure_persona_and_skills successfully")
+            
+            # Also monkey-patch _plugin_tool_fix to log tools after filtering
+            self._original_plugin_tool_fix = astr_main_agent._plugin_tool_fix
+            
+            def patched_plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
+                # Log tools before filtering
+                if req.func_tool:
+                    before_tools = [tool.name for tool in req.func_tool.tools if hasattr(tool, 'name')]
+                    logger.info(f"Tools before _plugin_tool_fix: {before_tools}")
+                else:
+                    logger.info("req.func_tool is None before _plugin_tool_fix")
+                
+                # Call original function
+                self._original_plugin_tool_fix(event, req)
+                
+                # Log tools after filtering
+                if req.func_tool:
+                    after_tools = [tool.name for tool in req.func_tool.tools if hasattr(tool, 'name')]
+                    logger.info(f"Tools after _plugin_tool_fix: {after_tools}")
+                else:
+                    logger.info("req.func_tool is None after _plugin_tool_fix")
+            
+            astr_main_agent._plugin_tool_fix = patched_plugin_tool_fix
+            logger.info("Monkey-patched _plugin_tool_fix successfully")
+            
         except Exception as e:
             logger.error(f"Failed to monkey-patch _ensure_persona_and_skills: {e}")
 
     async def terminate(self):
         """可选择实现异步的插件销毁方法，当插件被卸载/停用时会调用。"""
-        # Restore the original function
-        if hasattr(self, '_patched_module') and self._patched_module is not None and hasattr(self, '_original_ensure_persona_and_skills'):
-            self._patched_module._ensure_persona_and_skills = self._original_ensure_persona_and_skills
-            logger.info("Restored original _ensure_persona_and_skills")
+        # Restore the original functions
+        if hasattr(self, '_patched_module') and self._patched_module is not None:
+            if hasattr(self, '_original_ensure_persona_and_skills'):
+                self._patched_module._ensure_persona_and_skills = self._original_ensure_persona_and_skills
+                logger.info("Restored original _ensure_persona_and_skills")
+            if hasattr(self, '_original_plugin_tool_fix'):
+                self._patched_module._plugin_tool_fix = self._original_plugin_tool_fix
+                logger.info("Restored original _plugin_tool_fix")
 
     @llm_tool(name="store_memory")
     async def store_memory(self, event: AstrMessageEvent, relative_path: str, content: str) -> str:
