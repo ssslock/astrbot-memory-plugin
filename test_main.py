@@ -6,10 +6,28 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch, Mock
 import sys
 
+# Add AstrBot repository to the path - BEFORE importing main
+astrbot_path = r'C:\Work\git\AstrBot'
+if astrbot_path not in sys.path:
+    sys.path.insert(0, astrbot_path)
+
 # Add the current directory to sys.path to import main.py
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from main import MyPlugin
+# Mock astrbot imports before importing main
+with patch.dict('sys.modules', {
+    'astrbot': MagicMock(),
+    'astrbot.api': MagicMock(),
+    'astrbot.api.event': MagicMock(),
+    'astrbot.api.star': MagicMock(),
+    'astrbot.api.logger': MagicMock(),
+    'astrbot.core.agent.message': MagicMock(),
+    'astrbot.core.provider.entities': MagicMock(),
+    'astrbot.core.provider': MagicMock(),
+    'astrbot.core.utils.astrbot_path': MagicMock(),
+    'astrbot.core.astr_main_agent': MagicMock(),
+}):
+    from main import MyPlugin
 
 
 class TestMyPlugin:
@@ -48,19 +66,23 @@ class TestMyPlugin:
                 yield plugin
     
     @pytest.fixture
-    def initialized_plugin(self, plugin_instance):
+    async def initialized_plugin(self, plugin_instance):
         """Create and initialize a plugin instance"""
-        # Mock logger to prevent actual logging during tests
-        with patch('main.logger'):
+        # Mock logger and astrbot imports
+        with patch('main.logger'), \
+             patch('main.importlib'), \
+             patch('main.astrbot.core.astr_main_agent'):
             # Run initialize
-            asyncio.run(plugin_instance.initialize())
+            await plugin_instance.initialize()
             yield plugin_instance
     
     @pytest.mark.asyncio
     async def test_initialization(self, plugin_instance, mock_context):
         """Test plugin initialization"""
-        # Mock logger
-        with patch('main.logger'):
+        # Mock logger and astrbot imports
+        with patch('main.logger'), \
+             patch('main.importlib'), \
+             patch('main.astrbot.core.astr_main_agent'):
             # Run initialization
             await plugin_instance.initialize()
             
