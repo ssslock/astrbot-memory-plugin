@@ -34,7 +34,7 @@ class MyPlugin(Star, PluginKVStoreMixin):
         self.ttl_cron_job_id = None  # Add this to track cron job
 
     def _parse_ttl(self, ttl_str: str) -> Optional[timedelta]:
-        """Parse TTL string like '20d', '6m', '1y' into timedelta."""
+        """Parse TTL string like '5h', '20d', '6m', '1y' into timedelta."""
         if ttl_str.lower() == "permanent":
             return None
         
@@ -42,7 +42,7 @@ class MyPlugin(Star, PluginKVStoreMixin):
         if len(ttl_str) >= 5:  # length must be smaller than 5
             return None
         
-        if not ttl_str.endswith(('d', 'm', 'y')):
+        if not ttl_str.endswith(('h', 'd', 'm', 'y')):
             return None
         
         # Check all other characters are digits
@@ -58,20 +58,22 @@ class MyPlugin(Star, PluginKVStoreMixin):
         except ValueError:
             return None
         
-        # Convert to days
+        # Convert to timedelta
         unit = ttl_str[-1]
-        if unit == 'd':
-            return timedelta(days=num + 1)  # Add 1 extra day as specified
+        if unit == 'h':
+            return timedelta(hours=num)
+        elif unit == 'd':
+            return timedelta(days=num)
         elif unit == 'm':
-            return timedelta(days=(num * 30) + 1)  # 1m = 30 days, plus 1 extra
+            return timedelta(days=num * 30)  # Approximate month as 30 days
         elif unit == 'y':
-            return timedelta(days=(num * 365) + 1)  # 1y = 365 days, plus 1 extra
+            return timedelta(days=num * 365)  # Approximate year as 365 days
         else:
             return None
 
     def _get_ttl_date_key(self, date: datetime) -> str:
-        """Generate key for TTL date to files mapping."""
-        date_str = date.strftime("%Y-%m-%d")
+        """Generate key for TTL date to files mapping (hour-based)."""
+        date_str = date.strftime("%Y-%m-%d %H:00")
         return f"TTL_DATE_TO_FILES:{date_str}"
 
     def _get_file_ttl_key(self, relative_path: str) -> str:
@@ -84,13 +86,15 @@ class MyPlugin(Star, PluginKVStoreMixin):
         if ttl_delta is None:
             return "No TTL setup (invalid format or permanent)"
         
-        # Calculate expiration date (adding current date + ttl_delta)
+        # Calculate expiration date (adding current datetime + ttl_delta)
         now = datetime.now()
         expire_date = now + ttl_delta
-        expire_date = expire_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        # Round down to the current hour
+        expire_date = expire_date.replace(minute=0, second=0, microsecond=0)
         
         # Store file->date mapping
-        expire_date_str = expire_date.strftime("%Y-%m-%d")
+        expire_date_str = expire_date.strftime("%Y-%m-%d %H:00")
         await self.put_kv_data(self._get_file_ttl_key(relative_path), expire_date_str)
         
         # Store date->files mapping
@@ -135,14 +139,15 @@ class MyPlugin(Star, PluginKVStoreMixin):
         """Clean up files that have expired (cron job handler)."""
         now = datetime.now()
         
-        # Check current date and previous day (to catch any missed files)
-        dates_to_check = []
-        for days_back in [0, 1]:
-            check_date = now - timedelta(days=days_back)
-            dates_to_check.append(check_date.strftime("%Y-%m-%d"))
+        # Check current hour and previous hour (to catch any missed files)
+        hours_to_check = []
+        for hours_back in [0, 1]:
+            check_hour = now - timedelta(hours=hours_back)
+            check_hour = check_hour.replace(minute=0, second=0, microsecond=0)
+            hours_to_check.append(check_hour.strftime("%Y-%m-%d %H:00"))
         
-        for date_str in dates_to_check:
-            files_key = f"TTL_DATE_TO_FILES:{date_str}"
+        for hour_str in hours_to_check:
+            files_key = f"TTL_DATE_TO_FILES:{hour_str}"
             files_str = await self.get_kv_data(files_key, "")
             
             if files_str:
@@ -177,9 +182,9 @@ class MyPlugin(Star, PluginKVStoreMixin):
         try:
             job = await self.context.cron_manager.add_basic_job(
                 name=f"{self.plugin_id}-ttl-cleanup",
-                cron_expression="10 0 * * *",  # 00:00:10 every day
+                cron_expression="0 * * * *",  # Run at the start of every hour
                 handler=self._cleanup_expired_files,
-                description="Clean up expired memory files",
+                description="Clean up expired memory files (hourly)",
                 timezone=None,  # Use local timezone
                 payload={},
                 enabled=True,
@@ -264,8 +269,9 @@ class MyPlugin(Star, PluginKVStoreMixin):
             content (string): The file content to store.
             ttl (string): Time to live in format like "5h", "20d", "6m", "1y". 
                           Must be shorter than 5 chars, end with h/d/m/y, and contain only digits before suffix.
-                          "1d" = 24 hours, "1m" = 30 days, "1y" = 365 days.
+                          "1h" = 1 hour, "1d" = 24 hours, "1m" = 30 days, "1y" = 365 days.
                           Use "permanent" for no expiration.
+                          Cleanup runs at the start of each hour.
         
         Returns:
             string: "OK" if successful, otherwise an error message.
