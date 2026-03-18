@@ -5,15 +5,20 @@ from astrbot.core.agent.message import TextPart
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.provider import Provider
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from ai_context.plugin_kv_store import PluginKVStoreMixin
 import importlib
 import inspect
 import datetime
 import zoneinfo
 import os
 from pathlib import Path
+from datetime import datetime, timedelta
+import re
+from zoneinfo import ZoneInfo
+from typing import Optional
 
 @register("astrbot-memory-plugin", "ssslock", "自用记忆管理插件", "0.1.0")
-class MyPlugin(Star):
+class MyPlugin(Star, PluginKVStoreMixin):
     def __init__(self, context: Context):
         super().__init__(context)
         # Always convert to Path object to ensure proper path joining
@@ -22,9 +27,142 @@ class MyPlugin(Star):
         data_path = Path(str(data_path))
         # Handle self.name which may not be available in older versions
         plugin_name = getattr(self, 'name', 'astrbot-memory-plugin')
+        self.plugin_id = plugin_name  # Required for PluginKVStoreMixin
         self.plugin_data_path = data_path / "plugin_data" / plugin_name
         self.memory_path = self.plugin_data_path / "memory"
         self.self_prompt_path = self.memory_path / "self_prompt"
+        self.ttl_cron_job_id = None  # Add this to track cron job
+
+    def _parse_ttl(self, ttl_str: str) -> Optional[timedelta]:
+        """Parse TTL string like '20d', '6m', '1y' into timedelta."""
+        if ttl_str.lower() == "permanent":
+            return None
+        
+        # Strict validation
+        if len(ttl_str) >= 5:  # length must be smaller than 5
+            return None
+        
+        if not ttl_str.endswith(('d', 'm', 'y')):
+            return None
+        
+        # Check all other characters are digits
+        prefix = ttl_str[:-1]
+        if not prefix.isdigit():
+            return None
+        
+        # Parse the number
+        try:
+            num = int(prefix)
+            if num < 0:
+                return None
+        except ValueError:
+            return None
+        
+        # Convert to days
+        unit = ttl_str[-1]
+        if unit == 'd':
+            return timedelta(days=num + 1)  # Add 1 extra day as specified
+        elif unit == 'm':
+            return timedelta(days=(num * 30) + 1)  # 1m = 30 days, plus 1 extra
+        elif unit == 'y':
+            return timedelta(days=(num * 365) + 1)  # 1y = 365 days, plus 1 extra
+        else:
+            return None
+
+    def _get_ttl_date_key(self, date: datetime) -> str:
+        """Generate key for TTL date to files mapping."""
+        date_str = date.strftime("%Y-%m-%d")
+        return f"TTL_DATE_TO_FILES:{date_str}"
+
+    def _get_file_ttl_key(self, relative_path: str) -> str:
+        """Generate key for file to TTL date mapping."""
+        return f"TTL_FILE_TO_DATE:{relative_path}"
+
+    async def _setup_ttl(self, relative_path: str, ttl_str: str) -> str:
+        """Setup TTL for a file."""
+        ttl_delta = self._parse_ttl(ttl_str)
+        if ttl_delta is None:
+            return "No TTL setup (invalid format or permanent)"
+        
+        # Calculate expiration date (adding current date + ttl_delta)
+        now = datetime.now()
+        expire_date = now + ttl_delta
+        expire_date = expire_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        # Store file->date mapping
+        expire_date_str = expire_date.strftime("%Y-%m-%d")
+        await self.put_kv_data(self._get_file_ttl_key(relative_path), expire_date_str)
+        
+        # Store date->files mapping
+        date_key = self._get_ttl_date_key(expire_date)
+        existing_files = await self.get_kv_data(date_key, "")
+        if existing_files:
+            new_files = existing_files + "\n" + relative_path
+        else:
+            new_files = relative_path
+        
+        await self.put_kv_data(date_key, new_files)
+        
+        return f"TTL set until {expire_date_str}"
+
+    async def _delete_ttl(self, relative_path: str) -> None:
+        """Delete TTL records for a file."""
+        # Get the expiration date
+        date_key = self._get_file_ttl_key(relative_path)
+        expire_date_str = await self.get_kv_data(date_key, None)
+        
+        if not expire_date_str:
+            return
+        
+        # Remove from date->files mapping
+        files_key = f"TTL_DATE_TO_FILES:{expire_date_str}"
+        files_str = await self.get_kv_data(files_key, "")
+        
+        if files_str:
+            # Split by newline and filter out the current file
+            files_list = files_str.split("\n")
+            files_list = [f for f in files_list if f != relative_path]
+            
+            if files_list:
+                await self.put_kv_data(files_key, "\n".join(files_list))
+            else:
+                await self.delete_kv_data(files_key)
+        
+        # Remove file->date mapping
+        await self.delete_kv_data(date_key)
+
+    async def _cleanup_expired_files(self) -> None:
+        """Clean up files that have expired (cron job handler)."""
+        now = datetime.now()
+        
+        # Check current date and previous day (to catch any missed files)
+        dates_to_check = []
+        for days_back in [0, 1]:
+            check_date = now - timedelta(days=days_back)
+            dates_to_check.append(check_date.strftime("%Y-%m-%d"))
+        
+        for date_str in dates_to_check:
+            files_key = f"TTL_DATE_TO_FILES:{date_str}"
+            files_str = await self.get_kv_data(files_key, "")
+            
+            if files_str:
+                files_list = files_str.strip().split("\n")
+                for relative_path in files_list:
+                    if not relative_path.strip():
+                        continue
+                        
+                    try:
+                        # Remove the file
+                        full_path = (self.memory_path / relative_path).resolve()
+                        if full_path.exists() and full_path.is_file():
+                            full_path.unlink()
+                            logger.info(f"Removed expired file: {full_path}")
+                        
+                        # Clean up TTL records
+                        await self._delete_ttl(relative_path)
+                        
+                    except Exception as e:
+                        logger.error(f"Error cleaning up expired file {relative_path}: {e}")
 
     async def initialize(self):
         """可选择实现异步的插件初始化方法，当实例化该插件类之后会自动调用该方法。"""
@@ -34,6 +172,23 @@ class MyPlugin(Star):
         self.memory_path.mkdir(parents=True, exist_ok=True)
         self.self_prompt_path.mkdir(parents=True, exist_ok=True)
         logger.info(f"Plugin data path: {self.plugin_data_path}")
+
+        # Add TTL cleanup cron job
+        try:
+            job = await self.context.cron_manager.add_basic_job(
+                name=f"{self.plugin_id}-ttl-cleanup",
+                cron_expression="10 0 * * *",  # 00:00:10 every day
+                handler=self._cleanup_expired_files,
+                description="Clean up expired memory files",
+                timezone=None,  # Use local timezone
+                payload={},
+                enabled=True,
+                persistent=False,
+            )
+            self.ttl_cron_job_id = job.job_id
+            logger.info(f"TTL cleanup cron job scheduled: {self.ttl_cron_job_id}")
+        except Exception as e:
+            logger.error(f"Failed to schedule TTL cleanup cron job: {e}")
 
         # Monkey-patch _ensure_persona_and_skills in astr_main_agent
         try:
@@ -86,6 +241,14 @@ class MyPlugin(Star):
 
     async def terminate(self):
         """可选择实现异步的插件销毁方法，当插件被卸载/停用时会调用。"""
+        # Remove TTL cleanup cron job
+        if self.ttl_cron_job_id:
+            try:
+                await self.context.cron_manager.delete_job(self.ttl_cron_job_id)
+                logger.info(f"Removed TTL cleanup cron job: {self.ttl_cron_job_id}")
+            except Exception as e:
+                logger.error(f"Failed to remove TTL cleanup cron job: {e}")
+
         # Restore the original functions
         if hasattr(self, '_patched_module') and self._patched_module is not None:
             if hasattr(self, '_original_ensure_persona_and_skills'):
@@ -93,13 +256,18 @@ class MyPlugin(Star):
                 logger.info("Restored original _ensure_persona_and_skills")
 
     @llm_tool(name="store_memory")
-    async def store_memory(self, event: AstrMessageEvent, relative_path: str, content: str) -> str:
+    async def store_memory(self, event: AstrMessageEvent, relative_path: str, content: str, ttl: str = "permanent") -> str:
         """Store memory content with a relative file path
         
         Args:
             relative_path (string): The relative file path where the content should be stored.
             content (string): The file content to store.
-            
+            ttl (string): Time to live in format like "20d", "6m", "1y". 
+                          Must be shorter than 5 chars, end with d/m/y, and contain only digits before suffix.
+                          "1m" = 30 days, "1y" = 365 days. 
+                          Use "0d"/"0m"/"0y" to store until end of current day.
+                          Default is "permanent".
+        
         Returns:
             string: "OK" if successful, otherwise an error message.
         """
@@ -113,12 +281,22 @@ class MyPlugin(Star):
             # Create parent directories if they don't exist
             full_path.parent.mkdir(parents=True, exist_ok=True)
             
+            # Clear any existing TTL for this file
+            await self._delete_ttl(relative_path)
+            
             # Write the content
             full_path.write_text(content, encoding='utf-8')
             
-            # Log for debugging
-            logger.info(f"Stored file: {full_path}, content length: {len(content)}")
+            # Setup TTL if specified and valid
+            ttl_result = ""
+            if ttl.lower() != "permanent":
+                ttl_result = await self._setup_ttl(relative_path, ttl)
             
+            # Log for debugging
+            logger.info(f"Stored file: {full_path}, content length: {len(content)}, ttl: {ttl}")
+            
+            if ttl_result and not ttl_result.startswith("No TTL setup"):
+                return f"OK. {ttl_result}"
             return "OK"
         except Exception as e:
             logger.error(f"Error storing file: {e}")
@@ -168,6 +346,10 @@ class MyPlugin(Star):
                 return "Error: Invalid path - cannot access outside plugin data directory"
             
             if full_path.exists() and full_path.is_file():
+                # Remove TTL records first
+                await self._delete_ttl(relative_path)
+                
+                # Then delete the file
                 full_path.unlink()
                 logger.info(f"Deleted file: {full_path}")
                 return "deleted"
