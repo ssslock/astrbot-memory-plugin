@@ -256,17 +256,16 @@ class MyPlugin(Star, PluginKVStoreMixin):
                 logger.info("Restored original _ensure_persona_and_skills")
 
     @llm_tool(name="store_memory")
-    async def store_memory(self, event: AstrMessageEvent, relative_path: str, content: str, ttl: str = "permanent") -> str:
+    async def store_memory(self, event: AstrMessageEvent, relative_path: str, content: str, ttl: str) -> str:
         """Store memory content with a relative file path
         
         Args:
             relative_path (string): The relative file path where the content should be stored.
             content (string): The file content to store.
-            ttl (string): Time to live in format like "20d", "6m", "1y". 
-                          Must be shorter than 5 chars, end with d/m/y, and contain only digits before suffix.
-                          "1m" = 30 days, "1y" = 365 days. 
-                          Use "0d"/"0m"/"0y" to store until end of current day.
-                          Default is "permanent".
+            ttl (string): Time to live in format like "5h", "20d", "6m", "1y". 
+                          Must be shorter than 5 chars, end with h/d/m/y, and contain only digits before suffix.
+                          "1d" = 24 hours, "1m" = 30 days, "1y" = 365 days.
+                          Use "permanent" for no expiration.
         
         Returns:
             string: "OK" if successful, otherwise an error message.
