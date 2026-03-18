@@ -28,6 +28,11 @@ class MyPlugin(Star):
         """可选择实现异步的插件初始化方法，当实例化该插件类之后会自动调用该方法。"""
         # Ensure the plugin data directory exists
         self.plugin_data_path.mkdir(parents=True, exist_ok=True)
+        # Create subdirectories for memory and self_prompt
+        memory_dir = self.plugin_data_path / "memory"
+        memory_dir.mkdir(parents=True, exist_ok=True)
+        self_prompt_dir = self.plugin_data_path / "self_prompt"
+        self_prompt_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Plugin data path: {self.plugin_data_path}")
 
         # Monkey-patch _ensure_persona_and_skills in astr_main_agent
@@ -48,7 +53,7 @@ class MyPlugin(Star):
                         logger.warning("Could not get self prompt file path: self_id not found")
                         return
                     
-                    full_path = (self.plugin_data_path / relative_path).resolve()
+                    full_path = (self.plugin_data_path / "self_prompt" / relative_path).resolve()
                     # Ensure the full path is within plugin_data_path
                     if not str(full_path).startswith(str(self.plugin_data_path.resolve())):
                         return "Error: Invalid path - cannot store outside plugin data directory"
@@ -100,7 +105,7 @@ class MyPlugin(Star):
         """
         try:
             # Ensure the relative path is safe
-            full_path = (self.plugin_data_path / relative_path).resolve()
+            full_path = (self.plugin_data_path / "memory" / relative_path).resolve()
             # Ensure the full path is within plugin_data_path
             if not str(full_path).startswith(str(self.plugin_data_path.resolve())):
                 return "Error: Invalid path - cannot store outside plugin data directory"
@@ -130,7 +135,7 @@ class MyPlugin(Star):
             string: The stored file name and content if found, or "not found" if it does not exist.
         """
         try:
-            full_path = (self.plugin_data_path / relative_path).resolve()
+            full_path = (self.plugin_data_path / "memory" / relative_path).resolve()
             # Ensure the full path is within plugin_data_path
             if not str(full_path).startswith(str(self.plugin_data_path.resolve())):
                 return "Error: Invalid path - cannot access outside plugin data directory"
@@ -157,7 +162,7 @@ class MyPlugin(Star):
             string: "deleted" if successfully deleted, "not found" if file doesn't exist, or an error message.
         """
         try:
-            full_path = (self.plugin_data_path / relative_path).resolve()
+            full_path = (self.plugin_data_path / "memory" / relative_path).resolve()
             # Ensure the full path is within plugin_data_path
             if not str(full_path).startswith(str(self.plugin_data_path.resolve())):
                 return "Error: Invalid path - cannot access outside plugin data directory"
@@ -185,7 +190,7 @@ class MyPlugin(Star):
                     Returns "not found" if the directory doesn't exist, or an error message.
         """
         try:
-            full_path = (self.plugin_data_path / relative_path).resolve()
+            full_path = (self.plugin_data_path / "memory" / relative_path).resolve()
             # Ensure the full path is within plugin_data_path
             if not str(full_path).startswith(str(self.plugin_data_path.resolve())):
                 return "Error: Invalid path - cannot access outside plugin data directory"
@@ -268,7 +273,7 @@ class MyPlugin(Star):
             response = ""
 
             # Get the full path and ensure it's within plugin data directory
-            full_path = (self.plugin_data_path / relative_path).resolve()
+            full_path = (self.plugin_data_path / "memory" / relative_path).resolve()
             if not str(full_path).startswith(str(self.plugin_data_path.resolve())):
                 return "Error: Invalid path - cannot access outside plugin data directory"
             
