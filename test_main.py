@@ -7,9 +7,15 @@ from unittest.mock import AsyncMock, MagicMock, patch, Mock
 import sys
 
 # Add AstrBot repository to the path - BEFORE importing main
-astrbot_path = r'C:\Work\git\AstrBot'
-if astrbot_path not in sys.path:
-    sys.path.insert(0, astrbot_path)
+import os
+astrbot_dir = r'C:\Work\git\AstrBot'
+if astrbot_dir not in sys.path:
+    sys.path.insert(0, astrbot_dir)
+
+# Also add the src directory if AstrBot has one
+astrbot_src = os.path.join(astrbot_dir, 'src')
+if os.path.exists(astrbot_src) and astrbot_src not in sys.path:
+    sys.path.insert(0, astrbot_src)
 
 # Add the current directory to sys.path to import main.py
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
