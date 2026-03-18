@@ -23,6 +23,8 @@ class MyPlugin(Star):
         # Handle self.name which may not be available in older versions
         plugin_name = getattr(self, 'name', 'astrbot-memory-plugin')
         self.plugin_data_path = data_path / "plugin_data" / plugin_name
+        self.memory_path = self.plugin_data_path / "memory"
+        self.self_prompt_path = self.memory_path / "self_prompt"
 
     async def initialize(self):
         """可选择实现异步的插件初始化方法，当实例化该插件类之后会自动调用该方法。"""
