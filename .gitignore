@@ -1,2 +1,3 @@
 .aider*
 ai-context/*
+__pycache__/*

@@ -5,7 +5,6 @@ from astrbot.core.agent.message import TextPart
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.provider import Provider
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-from ai_context.plugin_kv_store import PluginKVStoreMixin
 import importlib
 import inspect
 import datetime
@@ -18,7 +17,7 @@ from zoneinfo import ZoneInfo
 from typing import Optional
 
 @register("astrbot-memory-plugin", "ssslock", "自用记忆管理插件", "0.1.0")
-class MyPlugin(Star, PluginKVStoreMixin):
+class MyPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
         # Always convert to Path object to ensure proper path joining
