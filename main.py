@@ -87,7 +87,7 @@ class MyPlugin(Star):
         
         # Calculate expiration date (adding current datetime + ttl_delta)
         now = datetime.now()
-        expire_date = now + ttl_delta
+        expire_date = now + ttl_delta + timedelta(hours=1)  # Add 1 hour buffer to ensure it doesn't expire immediately
         
         # Round down to the current hour
         expire_date = expire_date.replace(minute=0, second=0, microsecond=0)
@@ -260,7 +260,7 @@ class MyPlugin(Star):
                 logger.info("Restored original _ensure_persona_and_skills")
 
     @llm_tool(name="store_memory")
-    async def store_memory(self, event: AstrMessageEvent, relative_path: str, content: str, ttl: str) -> str:
+    async def store_memory(self, event: AstrMessageEvent, relative_path: str, content: str, ttl: str = "permanent") -> str:
         """Store memory content with a relative file path
         
         Args:
