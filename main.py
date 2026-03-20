@@ -279,8 +279,8 @@ class MyPlugin(Star):
             # Ensure the relative path is safe
             full_path = (self.memory_path / relative_path).resolve()
             # Ensure the full path is within plugin_data_path
-            if not str(full_path).startswith(str(self.plugin_data_path.resolve())):
-                return "Error: Invalid path - cannot store outside plugin data directory"
+            if not str(full_path).startswith(str(self.memory_path.resolve())):
+                return "Error: Invalid path - cannot access outside memory directory"
             
             # Create parent directories if they don't exist
             full_path.parent.mkdir(parents=True, exist_ok=True)
@@ -319,8 +319,8 @@ class MyPlugin(Star):
         try:
             full_path = (self.memory_path / relative_path).resolve()
             # Ensure the full path is within plugin_data_path
-            if not str(full_path).startswith(str(self.plugin_data_path.resolve())):
-                return "Error: Invalid path - cannot access outside plugin data directory"
+            if not str(full_path).startswith(str(self.memory_path.resolve())):
+                return "Error: Invalid path - cannot access outside memory directory"
             
             if full_path.exists() and full_path.is_file():
                 content = full_path.read_text(encoding='utf-8')
@@ -346,8 +346,8 @@ class MyPlugin(Star):
         try:
             full_path = (self.memory_path / relative_path).resolve()
             # Ensure the full path is within plugin_data_path
-            if not str(full_path).startswith(str(self.plugin_data_path.resolve())):
-                return "Error: Invalid path - cannot access outside plugin data directory"
+            if not str(full_path).startswith(str(self.memory_path.resolve())):
+                return "Error: Invalid path - cannot access outside memory directory"
             
             if full_path.exists() and full_path.is_file():
                 # Remove TTL records first
@@ -378,8 +378,8 @@ class MyPlugin(Star):
         try:
             full_path = (self.memory_path / relative_path).resolve()
             # Ensure the full path is within plugin_data_path
-            if not str(full_path).startswith(str(self.plugin_data_path.resolve())):
-                return "Error: Invalid path - cannot access outside plugin data directory"
+            if not str(full_path).startswith(str(self.memory_path.resolve())):
+                return "Error: Invalid path - cannot access outside memory directory"
             
             if not full_path.exists():
                 logger.info(f"Directory not found: {full_path}")
@@ -460,10 +460,8 @@ class MyPlugin(Star):
 
             # Get the full path and ensure it's within plugin data directory
             full_path = (self.memory_path / relative_path).resolve()
-            if not str(full_path).startswith(str(self.plugin_data_path.resolve())):
-                return "Error: Invalid path - cannot access outside plugin data directory"
-            
-            file_name = full_path.name
+            if not str(full_path).startswith(str(self.memory_path.resolve())):
+                return "Error: Invalid path - cannot access outside memory directory"
             
             # Get the knowledge base manager from context
             if not hasattr(self.context, 'kb_manager'):
@@ -479,10 +477,10 @@ class MyPlugin(Star):
                 existing_docs = await kb_helper.list_documents()
                 deleted_count = 0
                 for doc in existing_docs:
-                    if doc.doc_name == file_name:
+                    if doc.doc_name == relative_path:
                         await kb_helper.delete_document(doc.doc_id)
                         deleted_count += 1
-                        logger.info(f"Deleted existing document with name '{file_name}' (ID: {doc.doc_id})")
+                        logger.info(f"Deleted existing document with name '{relative_path}' (ID: {doc.doc_id})")
                 
                 if deleted_count > 0:
                     logger.info(f"Deleted {deleted_count} existing document(s) with the same name before upload")
@@ -507,7 +505,7 @@ class MyPlugin(Star):
             # Upload the document
             try:
                 doc = await kb_helper.upload_document(
-                    file_name=file_name,
+                    file_name=relative_path,
                     file_content=file_content,
                     file_type=file_type,
                     chunk_size=1024,  # Default values
@@ -518,8 +516,8 @@ class MyPlugin(Star):
                     progress_callback=None,
                     pre_chunked_text=None,
                 )
-                logger.info(f"Successfully uploaded {file_name} to ai-memory knowledge base. Document ID: {doc.doc_id}")
-                return response + f"OK: Uploaded {file_name} to ai-memory knowledge base. Document ID: {doc.doc_id}"
+                logger.info(f"Successfully uploaded {relative_path} to ai-memory knowledge base. Document ID: {doc.doc_id}")
+                return response + f"OK: Uploaded {relative_path} to ai-memory knowledge base. Document ID: {doc.doc_id}"
             except Exception as upload_error:
                 logger.error(f"Error uploading document: {upload_error}")
                 return response + f"Error uploading document: {str(upload_error)}"
