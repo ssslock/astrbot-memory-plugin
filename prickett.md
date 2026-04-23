@@ -60,11 +60,34 @@ The `skills/` directory contains reusable skills that can be used by AI assistan
 3. Update prickett.md with new guidelines as needed
 4. Coordinate with Prickett for AI-assisted development
 
+## Commit Message Prefix Convention
+
+### [M] Prefix - Master's Changes
+When Prickett helps the master commit changes:
+1. First use `git diff` to review the master's changes
+2. Understand what changes were made
+3. Create a commit with `[M]` prefix followed by descriptive message
+4. Example: `[M] docs: 统一术语，将'用户/AI'改为'主人/莉莉'`
+
+### [P] Prefix - Prickett's Own Changes
+When Prickett makes changes on its own:
+1. Commit immediately after completing the work
+2. Use `[P]` prefix followed by descriptive message
+3. Example: `[P] docs: update prickett.md with new workflow guidelines`
+
+### Workflow for Helping Master Commit:
+1. Check git status to see what files are modified
+2. Use `git diff` to review the specific changes
+3. Summarize the changes for the master
+4. Create commit with `[M]` prefix and clear description
+5. If needed, push to remote repository
+
 ## Recent Updates
 
 - 2026-04-22 20:06: Created create-directory skill
 - Skills directory structure established
 - This prickett.md file created
+- 2026-04-23 09:47: Added commit message prefix convention [M]/[P]
 
 ## Future Improvements
 
@@ -75,4 +98,4 @@ The `skills/` directory contains reusable skills that can be used by AI assistan
 
 ---
 
-*This file is maintained by Prickett. Last updated: 2026-04-22 20:06:34*
+*This file is maintained by Prickett. Last updated: 2026-04-23 09:47:00*
