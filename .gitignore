@@ -1,3 +1,12 @@
 .aider*
 ai-context/*
 __pycache__/*
+-e 
+# Work context directory - for temporary work files
+work-context/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+

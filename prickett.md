@@ -99,3 +99,37 @@ When Prickett makes changes on its own:
 ---
 
 *This file is maintained by Prickett. Last updated: 2026-04-23 09:47:00*
+
+## 部署流程
+
+### 完整部署步骤
+1. **开发完成**：在功能分支（如`feat/xxx`）完成开发
+2. **合并到main**：`git checkout main && git merge feat/xxx`
+3. **推送到origin**：`git push origin main`
+4. **手动更新插件**：在astrbot界面或通过命令手动更新/重载插件
+5. **测试验证**：测试新功能是否正常工作
+
+### 注意事项
+- 部署后需要手动更新插件，代码不会自动生效
+- 测试时注意查看astrbot日志是否有错误
+- 如有问题，可以回滚到之前的提交
+
+### 简化部署建议（未来）
+考虑实现自动部署或更简单的更新机制，减少手动步骤。
+
+## 文件管理
+
+### Git忽略规则
+以下目录和文件已被添加到.gitignore：
+- `work-context/` - 工作上下文临时文件
+- `__pycache__/` - Python缓存文件
+- `*.pyc`, `*.pyo`, `*.pyd` - Python编译文件
+- `.Python` - Python环境文件
+
+### 临时文件管理
+- `work-context/` 目录用于存放临时工作文件
+- 这些文件不应提交到版本控制
+- 重要数据应存储在`memory/`目录下
+
+---
+*更新于2026-04-23 11:33，添加部署流程和gitignore规则*
