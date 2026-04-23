@@ -291,3 +291,193 @@ async def on_enable(self):
 *创建时间：2026-04-23 10:29*
 *最后更新：2026-04-23 10:35*
 *状态：进行中*
+
+## 紧急修复：self prompt文件路径问题
+
+### 问题描述
+当前self prompt使用`event.message_obj.self_id`作为文件名，但实际应该使用人格名称。从日志可见：
+```
+Self prompt file /home/ssslock/astrbot/data/plugin_data/astrbot-memory-plugin/memory/self_prompt/astrbot_prickett_bot.md does not exist
+```
+
+### 根本原因
+1. `self_id`可能是会话ID或平台特定的标识符，不是人格名称
+2. 人格名称应该从context的persona_manager获取
+
+### 解决方案
+根据`/home/ssslock/repos/_prickett/AstrBot/astrbot/core/star/context.py`的分析：
+
+#### 1. 获取当前人格的方法
+```python
+# 从context获取persona_manager
+persona_manager = self.context.persona_manager
+
+# 获取当前会话的人格
+# 需要event.session作为umo参数
+persona = await persona_manager.resolve_selected_persona(
+    umo=event.session,
+    conversation_persona_id=None,
+    platform_name=event.get_platform_name(),
+    provider_settings=None
+)
+
+# persona[0]是persona_id, persona[1]是persona对象
+persona_id = persona[0]  # 如"prickett"
+persona_obj = persona[1]  # Personality对象
+```
+
+#### 2. 修改_get_self_prompt_file_path方法
+```python
+def _get_self_prompt_file_path(self, event: AstrMessageEvent) -> str:
+    """获取self prompt文件路径，基于人格名称而不是self_id"""
+    try:
+        # 方法1：尝试从persona_manager获取当前人格
+        persona_manager = self.context.persona_manager
+        
+        # 获取当前会话的人格信息
+        persona_info = await persona_manager.resolve_selected_persona(
+            umo=event.session,
+            conversation_persona_id=None,
+            platform_name=event.get_platform_name(),
+            provider_settings=None
+        )
+        
+        persona_id = persona_info[0]
+        if persona_id:
+            file_path = f"{persona_id}.md"
+            return file_path
+        
+        # 方法2：回退到默认人格
+        default_persona = await persona_manager.get_default_persona_v3(event.session)
+        if default_persona and hasattr(default_persona, 'name'):
+            file_path = f"{default_persona.name}.md"
+            return file_path
+        
+        # 方法3：最终回退到self_id
+        self_id = getattr(event.message_obj, 'self_id', None)
+        if self_id:
+            logger.warning(f"Using self_id as fallback for persona: {self_id}")
+            return f"{self_id}.md"
+            
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error getting persona for self prompt: {e}")
+        # 回退到原来的self_id逻辑
+        try:
+            self_id = event.message_obj.self_id
+            if self_id:
+                return f"{self_id}.md"
+        except:
+            pass
+        return None
+```
+
+#### 3. 创建默认self prompt文件
+如果文件不存在，应该创建默认内容：
+```python
+async def ensure_self_prompt_file(self, event: AstrMessageEvent):
+    """确保self prompt文件存在，如果不存在则创建默认内容"""
+    file_path = self._get_self_prompt_file_path(event)
+    if not file_path:
+        return False
+    
+    full_path = self.self_prompt_path / file_path
+    if not full_path.exists():
+        # 获取人格名称用于默认内容
+        persona_name = file_path.replace('.md', '')
+        
+        default_content = f"""# Self Prompt for {persona_name}
+
+## 基本身份
+你是{persona_name}，一个AI助手。
+
+## 核心能力
+1. 帮助主人完成各种任务
+2. 学习和适应主人的工作习惯
+3. 持续改进和优化工作流程
+
+## 工作原则
+1. 优先理解主人的意图
+2. 主动提供帮助和建议
+3. 保持学习和进步的态度
+
+---
+*创建时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*
+"""
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(full_path, 'w', encoding='utf-8') as f:
+            f.write(default_content)
+        logger.info(f"Created default self prompt file: {full_path}")
+    
+    return True
+```
+
+### 实施步骤
+
+#### 步骤1：修改现有代码
+1. 更新`_get_self_prompt_file_path`方法，使用人格名称
+2. 添加`ensure_self_prompt_file`方法，确保文件存在
+3. 在`on_enable`或首次调用时创建默认文件
+
+#### 步骤2：测试验证
+1. 验证人格名称正确获取
+2. 测试文件创建功能
+3. 验证回退机制
+
+#### 步骤3：更新文档
+1. 说明self prompt现在基于人格名称
+2. 提供文件位置和命名规则
+3. 添加使用示例
+
+### 对短期记忆开发的影响
+
+#### 正面影响
+1. **统一命名规则**：短期记忆也可以使用人格名称作为基础
+2. **更好的上下文**：知道当前人格有助于个性化短期记忆
+3. **一致性**：self prompt和短期记忆使用相同的身份标识
+
+#### 调整短期记忆文件命名
+```python
+# 原计划：current.md
+# 新方案：{persona_name}_current.md 或 {persona_name}/current.md
+
+# 示例：
+# prickett_current.md 或 prickett/current.md
+```
+
+#### 人格感知的短期记忆
+短期记忆可以包含人格特定信息：
+```markdown
+# 短期记忆 - {persona_name}的工作上下文
+
+## 人格信息
+- **名称**: {persona_name}
+- **角色**: {persona_role}
+- **工作风格**: {从self prompt中提取}
+
+## 当前工作状态
+...
+```
+
+### 时间安排
+这个修复应该**优先于**短期记忆开发，因为：
+1. 是现有功能的严重bug
+2. 影响短期记忆的基础设计
+3. 相对简单，可以快速完成
+
+**预计时间**：1-2小时
+
+### 测试计划
+1. 单元测试：验证人格名称获取逻辑
+2. 集成测试：测试文件创建和读取
+3. 回归测试：确保现有功能不受影响
+
+### 风险控制
+1. **回退机制**：保留self_id作为回退，确保不崩溃
+2. **日志记录**：详细记录人格获取过程，便于调试
+3. **兼容性**：确保与现有self prompt文件兼容
+
+---
+
+*添加于2026-04-23 10:37，紧急修复self prompt问题*
