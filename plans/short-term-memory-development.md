@@ -481,3 +481,301 @@ async def ensure_self_prompt_file(self, event: AstrMessageEvent):
 ---
 
 *添加于2026-04-23 10:37，紧急修复self prompt问题*
+
+## 文件路径结构调整方案
+
+### 当前问题分析
+1. **路径混乱**：self_prompt目录下按人格分文件，但实际只有一个人格在使用
+2. **工具冗余**：`get_self_prompt_file_path`工具只是返回路径，实际用处有限
+3. **使用不便**：需要先获取路径再操作，步骤繁琐
+
+### 新方案设计
+
+#### 1. 文件结构重组
+```
+plugin_data/astrbot-memory-plugin/memory/
+├── prickett/                    # 人格专属目录
+│   ├── self_prompt.md          # self prompt文件
+│   ├── short_term_current.md   # 当前短期记忆
+│   └── sessions/               # 历史会话归档
+│       ├── 2026-04-23_10-29_记忆系统开发.md
+│       └── ...
+├── other_persona/              # 其他人格（如有）
+│   ├── self_prompt.md
+│   └── ...
+└── shared/                     # 共享记忆（可选）
+    └── common_knowledge.md
+```
+
+#### 2. 工具函数简化
+**移除**：`get_self_prompt_file_path` - 返回路径的工具用处有限
+**新增**：
+- `read_self_prompt()` - 直接读取self prompt内容
+- `update_self_prompt()` - 直接更新self prompt
+- `read_short_term_memory()` - 读取短期记忆
+- `update_short_term_memory()` - 更新短期记忆
+
+#### 3. 路径解析逻辑
+```python
+def _get_persona_directory(self, persona_name: str = None) -> Path:
+    """获取人格目录路径"""
+    if persona_name is None:
+        # 自动检测当前人格
+        persona_name = self._get_current_persona_name()
+    
+    persona_dir = self.memory_path / persona_name
+    persona_dir.mkdir(parents=True, exist_ok=True)
+    return persona_dir
+
+def _get_self_prompt_path(self, persona_name: str = None) -> Path:
+    """获取self prompt文件路径"""
+    persona_dir = self._get_persona_directory(persona_name)
+    return persona_dir / "self_prompt.md"
+
+def _get_short_term_path(self, persona_name: str = None) -> Path:
+    """获取短期记忆文件路径"""
+    persona_dir = self._get_persona_directory(persona_name)
+    return persona_dir / "short_term_current.md"
+```
+
+### 工具函数设计
+
+#### 1. Self Prompt工具
+```python
+@llm_tool(name="read_self_prompt")
+async def read_self_prompt(self, event: AstrMessageEvent) -> str:
+    """读取当前人格的self prompt内容"""
+    try:
+        file_path = self._get_self_prompt_path()
+        if not file_path.exists():
+            return f"Self prompt文件不存在: {file_path}\n请使用update_self_prompt创建。"
+        
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return content
+    except Exception as e:
+        return f"读取self prompt失败: {str(e)}"
+
+@llm_tool(name="update_self_prompt")
+async def update_self_prompt(self, event: AstrMessageEvent, 
+                             content: str = None, 
+                             action: str = "replace") -> str:
+    """更新self prompt内容
+    
+    Args:
+        content: 要更新的内容
+        action: "replace"替换全部, "append"追加, "prepend"前置
+    """
+    try:
+        file_path = self._get_self_prompt_path()
+        
+        if action == "replace":
+            new_content = content
+        elif action == "append":
+            old_content = ""
+            if file_path.exists():
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    old_content = f.read()
+            new_content = old_content + "\n" + content
+        elif action == "prepend":
+            old_content = ""
+            if file_path.exists():
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    old_content = f.read()
+            new_content = content + "\n" + old_content
+        else:
+            return f"不支持的操作: {action}"
+        
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(new_content)
+        
+        return f"Self prompt更新成功: {file_path}"
+    except Exception as e:
+        return f"更新self prompt失败: {str(e)}"
+```
+
+#### 2. 短期记忆工具
+```python
+@llm_tool(name="read_short_term_memory")
+async def read_short_term_memory(self, event: AstrMessageEvent) -> str:
+    """读取当前短期记忆内容"""
+    try:
+        file_path = self._get_short_term_path()
+        if not file_path.exists():
+            return "短期记忆文件不存在，请先创建或更新。"
+        
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return content
+    except Exception as e:
+        return f"读取短期记忆失败: {str(e)}"
+
+@llm_tool(name="update_short_term_memory")
+async def update_short_term_memory(self, event: AstrMessageEvent,
+                                   section: str = None,
+                                   content: str = None,
+                                   action: str = "replace") -> str:
+    """更新短期记忆
+    
+    Args:
+        section: 要更新的章节，如"任务目标"、"工作进度"
+        content: 更新内容
+        action: "replace"替换, "append"追加, "remove"删除
+    """
+    # 实现章节级别的智能更新
+    pass
+```
+
+### 实施步骤
+
+#### 阶段1：重构文件结构（第1天）
+1. **修改初始化代码**：
+   ```python
+   def __init__(self, context: Context):
+       super().__init__(context)
+       # 现有代码...
+       self.persona_memory_path = self.memory_path / "prickett"  # 默认人格
+   ```
+
+2. **创建目录结构**：
+   ```python
+   async def on_enable(self):
+       await super().on_enable()
+       # 创建人格目录
+       self.persona_memory_path.mkdir(parents=True, exist_ok=True)
+       (self.persona_memory_path / "sessions").mkdir(exist_ok=True)
+   ```
+
+3. **迁移现有文件**（如有）：
+   - 将`self_prompt/astrbot_prickett_bot.md`移动到`prickett/self_prompt.md`
+   - 更新相关引用
+
+#### 阶段2：实现新工具函数（第2天）
+1. **实现`read_self_prompt`和`update_self_prompt`**
+2. **实现`read_short_term_memory`和`update_short_term_memory`**
+3. **移除`get_self_prompt_file_path`工具**
+4. **更新测试用例**
+
+#### 阶段3：智能更新功能（第3天）
+1. **实现章节解析**：解析Markdown的章节结构
+2. **智能合并**：支持章节级别的增删改
+3. **格式保持**：保持Markdown格式的完整性
+
+### 优势分析
+
+#### 1. 使用更简单
+**之前**：
+```python
+# 需要两步
+path = await get_self_prompt_file_path()
+# 然后手动读取/写入文件
+```
+
+**之后**：
+```python
+# 一步完成
+content = await read_self_prompt()
+await update_self_prompt(content="新内容", action="append")
+```
+
+#### 2. 结构更清晰
+- 每个人格有自己的目录
+- 相关文件组织在一起
+- 易于备份和迁移
+
+#### 3. 扩展性更好
+- 容易添加新的人格
+- 支持人格特定的配置
+- 便于实现人格切换功能
+
+#### 4. 减少错误
+- 直接操作内容，不需要处理文件路径
+- 内置错误处理和验证
+- 统一的接口设计
+
+### 兼容性考虑
+
+#### 向后兼容
+1. **逐步迁移**：先添加新工具，再标记旧工具为废弃
+2. **数据迁移**：提供迁移脚本或自动迁移
+3. **文档更新**：更新使用文档和示例
+
+#### 向前兼容
+1. **灵活的人格检测**：支持自动检测和手动指定人格
+2. **可配置的路径**：允许通过配置调整目录结构
+3. **扩展接口**：为未来功能预留接口
+
+### 测试策略
+
+#### 单元测试
+1. 路径解析函数测试
+2. 文件读写操作测试
+3. 章节解析逻辑测试
+
+#### 集成测试
+1. 工具函数调用测试
+2. 实际工作流测试
+3. 错误处理测试
+
+#### 迁移测试
+1. 现有数据迁移测试
+2. 兼容性测试
+3. 性能测试
+
+### 时间安排
+
+#### 第1天：基础重构
+- 修改文件结构
+- 实现基础工具函数
+- 基本测试
+
+#### 第2天：功能完善
+- 实现智能更新
+- 添加错误处理
+- 完善测试
+
+#### 第3天：集成优化
+- 与现有系统集成
+- 性能优化
+- 文档更新
+
+### 风险控制
+
+#### 技术风险
+1. **文件迁移风险**：确保数据不丢失
+   - 缓解：先备份，再迁移
+   
+2. **兼容性风险**：现有代码依赖旧路径
+   - 缓解：保持旧工具一段时间，逐步迁移
+
+3. **性能风险**：频繁文件操作可能影响性能
+   - 缓解：添加缓存机制，异步处理
+
+#### 业务风险
+1. **用户体验变化**：需要适应新工具
+   - 缓解：提供详细文档和示例
+   
+2. **学习成本**：新的工具接口需要学习
+   - 缓解：保持接口简单直观
+
+### 成功标准
+
+#### 功能标准
+- [ ] 新工具函数正常工作
+- [ ] 文件结构正确创建
+- [ ] 数据迁移完整无误
+
+#### 性能标准
+- [ ] 读取延迟 < 50ms
+- [ ] 更新延迟 < 100ms
+- [ ] 内存占用合理
+
+#### 用户体验标准
+- [ ] 工具使用简单直观
+- [ ] 错误信息清晰明确
+- [ ] 迁移过程平滑无感
+
+---
+
+*更新于2026-04-23 10:51，采用新的文件结构设计*
