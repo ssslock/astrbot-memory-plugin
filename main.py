@@ -32,7 +32,8 @@ class MyPlugin(Star):
         self.self_prompt_path = self.memory_path / "self_prompt"
         self.ttl_cron_job_id = None  # Add this to track cron job
 
-    async def on_req_llm(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
+    @filter.on_llm_request()
+    async def inject_self_prompt(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
         """When an LLM request is triggered, call this method to modify the request.
         
         Injects the persona's self-prompt into the system prompt.
@@ -49,10 +50,12 @@ class MyPlugin(Star):
                         req.system_prompt = ""
                     req.system_prompt += f"\n# Self Instructions\n\n{content}\n"
                     logger.info(f"Injected self instructions from {full_path}")
+                else:
+                    logger.warning(f"Self-prompt file {full_path} is empty.")
             else:
                 logger.warning(f"Self-prompt file not found or not a file at {full_path}")
         except Exception as e:
-            logger.error(f"Error in on_req_llm self-prompt injection: {e}")
+            logger.error(f"Error in inject_self_prompt self-prompt injection: {e}")
 
     def _parse_ttl(self, ttl_str: str) -> Optional[timedelta]:
         """Parse TTL string like '5h', '20d', '6m', '1y' into timedelta."""
