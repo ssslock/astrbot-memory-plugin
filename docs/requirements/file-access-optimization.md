@@ -31,9 +31,9 @@
    - 手动处理文件格式和结构
    - 容易出错且效率低下
 
-2. **配置分散**：
-   - 不同配置文件使用不同的访问方式
-   - 缺乏统一的配置管理策略
+2. **路径与对话ID绑定而不是与人格绑定**：
+   - 需要使用人格名称而不是当前社交软件的账号来决定路径
+   - 需要支持多个不同的配置文件以便将来扩展
 
 ## 功能需求
 
@@ -46,31 +46,23 @@
 - 自动处理文件写入
 
 ### 3. 固定路径
-- 路径写死，不做动态解析
-- 文件不存在时自动创建默认内容
+- 路径基于插件存储路径
+- 文件不存在时输出warning日志
 
 ## 示例
 
-### 读取self prompt
-```python
-# 当前方式
-path = get_self_prompt_file_path()
-content = read_file(path)
-
-# 优化后
-content = read_self_prompt()
+### 可能的文件存储方案
 ```
-
-### 更新self prompt
-```python
-# 当前方式
-path = get_self_prompt_file_path()
-content = read_file(path)
-new_content = content + "\n新内容"
-write_file(path, new_content)
-
-# 优化后
-update_self_prompt(content="新内容", action="append")
+plugin_data/astrbot-memory-plugin/memory/
+├── prickett/                    # 人格专属目录
+│   ├── self_prompt.md          # self prompt文件
+│   ├── short_term_current.md   # 当前短期记忆
+│   └── sessions/               # 历史会话归档
+│       ├── 2026-04-23_10-29_记忆系统开发.md
+│       └── ...
+├── other_persona/              # 其他人格（如有）
+│   ├── self_prompt.md
+│   └── ...
 ```
 
 ## 非功能需求
@@ -86,8 +78,8 @@ update_self_prompt(content="新内容", action="append")
 ## 验收标准
 
 - [ ] 莉莉可以使用简化API读取self prompt
-- [ ] 莉莉可以使用简化API更新self prompt（追加/替换/前置）
-- [ ] 文件不存在时自动创建
+- [ ] 莉莉可以使用简化API更新self prompt（同一个tool支持多种模式：追加/替换/前置）
+- [ ] 文件不存在时输出warning日志
 - [ ] 向后兼容现有使用方式
 
 ---
