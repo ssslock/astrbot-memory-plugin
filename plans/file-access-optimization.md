@@ -48,23 +48,27 @@ Implement high-level tools that abstract away path discovery.
 
 **Issue**: The plan uses `event.message_obj.self_id` for persona identification. However, `self_id` is a social platform account identifier (e.g., QQ number), not the persona name.
 
-**Solution**: Instead reference from `astr_main_agent.py`:
-```python
-# How astrbot resolves the current persona
-from astrbot.core.star.persona_manager import PersonaManager
-persona_id = await plugin_context.persona_manager.resolve_selected_persona(
-    umo=event.unified_msg_origin,
-    conversation_persona_id=req.conversation.persona_id,
-    ...
-)
-```
-For now, since there's only one persona ("prickett"), this can be simplified to a configured default value `self.default_persona`.
+**Solution**: The persona ID should be resolved from the actual conversation context, not hardcoded. `self.default_persona` points to the system default persona, not the actual persona profile being used.
+
+Two approaches:
+1. **In `on_req_llm`**: Use `req.conversation.persona_id` which contains the current conversation's persona ID.
+2. **Through persona manager**: Reference how astrbot resolves it (see `/home/ssslock/repos/_prickett/AstrBot/astrbot/core/astr_main_agent.py:382-388`):
+   ```python
+   persona_id = await plugin_context.persona_manager.resolve_selected_persona(
+       umo=event.unified_msg_origin,
+       conversation_persona_id=req.conversation.persona_id,
+       platform_name=event.get_platform_name(),
+       provider_settings=cfg,
+   )
+   ```
+
+For the plugin, we can access the persona manager via `self.context.provider_manager` or simply use `req.conversation.persona_id` if available.
 
 ### Replace Monkey-Patch with `on_req_llm`
 
 **Issue**: The current implementation monkey-patches `_ensure_persona_and_skills` in `astr_main_agent.py`, which is fragile and hard to maintain.
 
-**Solution**: Use the standard `on_req_llm` hook (as seen in `long_term_memory.py:151`):
+**Solution**: Use the standard `on_req_llm` hook (as seen in `/home/ssslock/repos/_prickett/AstrBot/astrbot/builtin_stars/astrbot/long_term_memory.py:151`):
 ```python
 async def on_req_llm(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
     """当触发 LLM 请求前，调用此方法修改 req"""
