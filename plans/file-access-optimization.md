@@ -41,3 +41,55 @@ Implement high-level tools that abstract away path discovery.
 - [ ] Files are stored in `plugin_data/astrbot-memory-plugin/memory/<persona>/self_prompt.md`.
 - [ ] Warning logs are triggered when attempting to read a non-existent self prompt.
 - [ ] The system prompt is successfully injected into the agent's context using the new pathing.
+
+## Review Notes (Prickett)
+
+### Identity Resolution
+
+**Issue**: The plan uses `event.message_obj.self_id` for persona identification. However, `self_id` is a social platform account identifier (e.g., QQ number), not the persona name.
+
+**Solution**: Instead reference from `astr_main_agent.py`:
+```python
+# How astrbot resolves the current persona
+from astrbot.core.star.persona_manager import PersonaManager
+persona_id = await plugin_context.persona_manager.resolve_selected_persona(
+    umo=event.unified_msg_origin,
+    conversation_persona_id=req.conversation.persona_id,
+    ...
+)
+```
+For now, since there's only one persona ("prickett"), this can be simplified to a configured default value `self.default_persona`.
+
+### Replace Monkey-Patch with `on_req_llm`
+
+**Issue**: The current implementation monkey-patches `_ensure_persona_and_skills` in `astr_main_agent.py`, which is fragile and hard to maintain.
+
+**Solution**: Use the standard `on_req_llm` hook (as seen in `long_term_memory.py:151`):
+```python
+async def on_req_llm(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
+    """当触发 LLM 请求前，调用此方法修改 req"""
+    # Read self_prompt.md and inject into req.system_prompt
+    self_prompt_path = self._get_persona_file_path(event, "self_prompt.md")
+    if self_prompt_path.exists():
+        content = self_prompt_path.read_text(encoding='utf-8').strip()
+        if content:
+            req.system_prompt += f"\n# Self Instructions\n\n{content}\n"
+```
+This eliminates:
+- The fragile monkey-patch
+- The `initialize`/`terminate` patch/restore logic
+- Direct dependency on `astr_main_agent` internals
+
+### Deprecate `get_self_prompt_file_path`
+
+- Keep the old tool but change its return to a deprecation warning
+- Remove it entirely in the next major version
+
+### Updated Acceptance Criteria
+- [ ] `read_self_prompt` tool allows reading without specifying a path
+- [ ] `update_self_prompt` tool handles `replace`/`append`/`prepend` modes
+- [ ] Files stored in `plugin_data/astrbot-memory-plugin/memory/<persona>/self_prompt.md`
+- [ ] Warning logs on missing self prompt (not auto-create)
+- [ ] Self prompt injection via `on_req_llm` instead of monkey-patch
+- [ ] `get_self_prompt_file_path` returns deprecation warning
+- [ ] Backward compatibility maintained for existing tools
