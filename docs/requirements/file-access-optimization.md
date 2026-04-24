@@ -51,6 +51,12 @@
 
 ## 示例
 
+### 流程改进对比
+
+**之前**：莉莉需要先调用 `get_self_prompt_file_path` 获取路径字符串，再用该路径去调用另一个tool（如 `retrieve_memory`）来读取/写入文件。两步tool call才能完成一次操作，且涉及手动处理路径。
+
+**之后**：莉莉直接调用 `read_self_prompt` 或 `update_self_prompt`，一步tool call完成操作，无需关心路径。
+
 ### 可能的文件存储方案
 ```
 plugin_data/astrbot-memory-plugin/memory/
