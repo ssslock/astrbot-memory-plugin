@@ -405,12 +405,11 @@ class MyPlugin(Star):
                     conv = await conv_mgr.get_conversation(uid, curr_cid)  # Conversation
                     if conv:
                         persona_id = getattr(conv, 'persona_id', None)
-                    else:
-                else:
             except Exception as e:
                 logger.warning(f"Could not resolve persona_id: {e}")
         
         if not persona_id:
+            logger.info(f"No persona_id resolved, falling back to 'prickett' persona")
             persona_id = "prickett"
 
         return (self.memory_path / persona_id / filename).resolve()
