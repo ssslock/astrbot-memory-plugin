@@ -399,12 +399,20 @@ class MyPlugin(Star):
             try:
                 # Attempt to resolve persona_id from the conversation manager if available
                 if hasattr(self.context, 'conversation_manager'):
+                    logger.info("Found conversation_manager in context")
                     uid = event.unified_msg_origin
+                    logger.info(f"Resolving persona_id for uid: {uid}")
                     conv_mgr = self.context.conversation_manager
                     curr_cid = await conv_mgr.get_curr_conversation_id(uid)
+                    logger.info(f"Current conversation ID: {curr_cid}")
                     conv = await conv_mgr.get_conversation(uid, curr_cid)  # Conversation
                     if conv:
                         persona_id = getattr(conv, 'persona_id', None)
+                        logger.info(f"Resolved persona_id from conversation: {persona_id}")
+                    else:
+                        logger.info("No conversation found for uid and cid")
+                else:
+                    logger.info("No conversation_manager found in context")
             except Exception as e:
                 logger.warning(f"Could not resolve persona_id: {e}")
         
