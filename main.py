@@ -399,7 +399,10 @@ class MyPlugin(Star):
             try:
                 # Attempt to resolve persona_id from the conversation manager if available
                 if hasattr(self.context, 'conversation_manager'):
-                    conv = await self.context.conversation_manager.get_conversation(event.unified_msg_origin)
+                    uid = event.unified_msg_origin
+                    conv_mgr = self.context.conversation_manager
+                    curr_cid = await conv_mgr.get_curr_conversation_id(uid)
+                    conv = await conv_mgr.get_conversation(uid, curr_cid)  # Conversation
                     if conv:
                         persona_id = getattr(conv, 'persona_id', None)
             except Exception as e:
