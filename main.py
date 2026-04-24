@@ -32,6 +32,26 @@ class MyPlugin(Star):
         self.self_prompt_path = self.memory_path / "self_prompt"
         self.ttl_cron_job_id = None  # Add this to track cron job
 
+    async def on_req_llm(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
+        """When an LLM request is triggered, call this method to modify the request.
+        
+        Injects the persona's self-prompt into the system prompt.
+        """
+        try:
+            # Use the request's conversation persona_id if available, otherwise resolve via event
+            persona_id = getattr(req.conversation, 'persona_id', None)
+            full_path = await self._get_persona_file_path(event, "self_prompt.md", persona_id=persona_id)
+            
+            if full_path.exists() and full_path.is_file():
+                content = full_path.read_text(encoding='utf-8').strip()
+                if content:
+                    if req.system_prompt is None:
+                        req.system_prompt = ""
+                    req.system_prompt += f"\n# Self Instructions\n\n{content}\n"
+                    logger.info(f"Injected self instructions from {full_path}")
+        except Exception as e:
+            logger.error(f"Error in on_req_llm self-prompt injection: {e}")
+
     def _parse_ttl(self, ttl_str: str) -> Optional[timedelta]:
         """Parse TTL string like '5h', '20d', '6m', '1y' into timedelta."""
         if ttl_str.lower() == "permanent":
@@ -176,7 +196,7 @@ class MyPlugin(Star):
         self.memory_path.mkdir(parents=True, exist_ok=True)
         self.self_prompt_path.mkdir(parents=True, exist_ok=True)
         logger.info(f"Plugin data path: {self.plugin_data_path}")
-
+        
         # Add TTL cleanup cron job
         try:
             job = await self.context.cron_manager.add_basic_job(
@@ -194,54 +214,6 @@ class MyPlugin(Star):
         except Exception as e:
             logger.error(f"Failed to schedule TTL cleanup cron job: {e}")
 
-        # Monkey-patch _ensure_persona_and_skills in astr_main_agent
-        try:
-            import astrbot.core.astr_main_agent as astr_main_agent
-            self._patched_module = astr_main_agent
-            self._original_ensure_persona_and_skills = astr_main_agent._ensure_persona_and_skills
-            
-            async def patched_ensure_persona_and_skills(req, cfg, plugin_context, event):
-                # Call original function first
-                await self._original_ensure_persona_and_skills(req, cfg, plugin_context, event)
-                
-                # Get self prompt file path using the helper
-                try:
-                    # Ensure the relative path is safe
-                    relative_path = self._get_self_prompt_file_path(event)
-                    if relative_path is None:
-                        logger.warning("Could not get self prompt file path: self_id not found")
-                        return
-                    
-                    full_path = (self.self_prompt_path / relative_path).resolve()
-                    # Ensure the full path is within plugin_data_path
-                    if not str(full_path).startswith(str(self.plugin_data_path.resolve())):
-                        return "Error: Invalid path - cannot store outside plugin data directory"
-                    
-                    # Create parent directories if they don't exist
-                    full_path.parent.mkdir(parents=True, exist_ok=True)
-                    
-                    # Try to read the file
-                    if os.path.exists(full_path):
-                        with open(full_path, 'r', encoding='utf-8') as f:
-                            content = f.read().strip()
-                        if content:
-                            # Append to system prompt
-                            if req.system_prompt is None:
-                                req.system_prompt = ""
-                            req.system_prompt += f"\n# Self Instructions\n\n{content}\n"
-                            logger.info(f"Appended self instructions from {full_path}")
-                    else:
-                        logger.info(f"Self prompt file {full_path} does not exist, skipping")
-                except Exception as e:
-                    logger.error(f"Error in patched _ensure_persona_and_skills: {e}")
-            
-            # Replace the function in the module
-            astr_main_agent._ensure_persona_and_skills = patched_ensure_persona_and_skills
-            logger.info("Monkey-patched _ensure_persona_and_skills successfully")
-            
-            
-        except Exception as e:
-            logger.error(f"Failed to monkey-patch _ensure_persona_and_skills: {e}")
 
     async def terminate(self):
         """可选择实现异步的插件销毁方法，当插件被卸载/停用时会调用。"""
@@ -251,13 +223,8 @@ class MyPlugin(Star):
                 await self.context.cron_manager.delete_job(self.ttl_cron_job_id)
                 logger.info(f"Removed TTL cleanup cron job: {self.ttl_cron_job_id}")
             except Exception as e:
-                logger.error(f"Failed to remove TTL cleanup cron job: {e}")
+                logger.error(f"Error deleting cron job: {e}")
 
-        # Restore the original functions
-        if hasattr(self, '_patched_module') and self._patched_module is not None:
-            if hasattr(self, '_original_ensure_persona_and_skills'):
-                self._patched_module._ensure_persona_and_skills = self._original_ensure_persona_and_skills
-                logger.info("Restored original _ensure_persona_and_skills")
 
     @llm_tool(name="store_memory")
     async def store_memory(self, event: AstrMessageEvent, relative_path: str, content: str, ttl: str = "permanent") -> str:
@@ -412,35 +379,84 @@ class MyPlugin(Star):
             logger.error(f"Error listing files: {e}")
             return f"Error: {str(e)}"
 
-    def _get_self_prompt_file_path(self, event: AstrMessageEvent) -> str:
-        """Helper function to get the path to the self prompt file for the current bot.
+    async def _get_persona_file_path(self, event: AstrMessageEvent, filename: str, persona_id: Optional[str] = None) -> Path:
+        """Helper function to get the absolute path to a persona-specific file.
+        
+        Args:
+            event (AstrMessageEvent): The event context.
+            filename (str): The name of the file (e.g., 'self_prompt.md').
+            persona_id (Optional[str]): Optional persona ID. If not provided, attempts to resolve it.
+            
+        Returns:
+            Path: The absolute path to the file.
+        """
+        if persona_id is None:
+            try:
+                # Attempt to resolve persona_id from the conversation manager if available
+                if hasattr(self.context, 'conversation_manager'):
+                    conv = await self.context.conversation_manager.get_conversation(event.unified_msg_origin)
+                    if conv:
+                        persona_id = getattr(conv, 'persona_id', None)
+            except Exception as e:
+                logger.warning(f"Could not resolve persona_id: {e}")
+        
+        if not persona_id:
+            # Return a path that is unlikely to exist or handle higher up
+            return self.memory_path / "unknown_persona" / filename
+
+        return (self.memory_path / persona_id / filename).resolve()
+
+
+    @llm_tool(name="read_self_prompt")
+    async def read_self_prompt(self, event: AstrMessageEvent) -> str:
+        """Read the self-prompt configuration for the current persona.
         
         Returns:
-            string: The file path (bot's self_id + ".md")
+            string: The content of the self-prompt file, or a message if not found.
         """
         try:
-            # Get the bot's self_id from the message object
-            self_id = event.message_obj.self_id
-            if not self_id:
-                return None
-            file_path = f"{self_id}.md"
-            return file_path
+            full_path = await self._get_persona_file_path(event, "self_prompt.md")
+            if full_path.exists() and full_path.is_file():
+                content = full_path.read_text(encoding='utf-8').strip()
+                return content if content else "The self-prompt file is empty."
+            else:
+                logger.warning(f"Self prompt file not found at {full_path}")
+                return "The self-prompt is not yet defined for the current persona."
         except Exception as e:
-            logger.error(f"Error getting self prompt file path: {e}")
-            return None
+            logger.error(f"Error reading self prompt: {e}")
+            return f"Error reading self prompt: {str(e)}"
 
-    @llm_tool(name="get_self_prompt_file_path")
-    async def get_self_prompt_file_path(self, event: AstrMessageEvent) -> str:
-        """Get the path to the self prompt file for the current bot.
+    @llm_tool(name="update_self_prompt")
+    async def update_self_prompt(self, event: AstrMessageEvent, mode: str, content: str) -> str:
+        """Update the self-prompt configuration for the current persona.
         
+        Args:
+            mode (string): The update mode: 'replace' (overwrite), 'append' (add to end), 'prepend' (add to start).
+            content (string): The text to write.
+            
         Returns:
-            string: The file path (bot's self_id + ".md") or an error message
+            string: "OK" if successful, otherwise an error message.
         """
-        file_path = self._get_self_prompt_file_path(event)
-        if file_path is None:
-            return "Error: Could not retrieve bot self_id"
-        logger.info(f"Self prompt file path: {file_path}")
-        return file_path
+        try:
+            full_path = await self._get_persona_file_path(event, "self_prompt.md")
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            if mode == "replace":
+                full_path.write_text(content, encoding='utf-8')
+            elif mode == "append":
+                existing_content = full_path.read_text(encoding='utf-8') if full_path.exists() else ""
+                full_path.write_text(existing_content + "\n" + content, encoding='utf-8')
+            elif mode == "prepend":
+                existing_content = full_path.read_text(encoding='utf-8') if full_path.exists() else ""
+                full_path.write_text(content + "\n" + existing_content, encoding='utf-8')
+            else:
+                return f"Error: Invalid mode '{mode}'. Supported modes are 'replace', 'append', 'prepend'."
+            
+            logger.info(f"Updated self prompt for persona at {full_path} using mode {mode}")
+            return "OK"
+        except Exception as e:
+            logger.error(f"Error updating self prompt: {e}")
+            return f"Error updating self prompt: {str(e)}"
 
     @llm_tool(name="upload_to_ai_memory")
     async def upload_to_ai_memory(self, event: AstrMessageEvent, relative_path: str) -> str:
