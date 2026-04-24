@@ -40,7 +40,7 @@ class MyPlugin(Star):
         """
         try:
             # Use the request's conversation persona_id if available, otherwise resolve via event
-            persona_id = getattr(req.conversation, 'persona_id', None) or None
+            persona_id = getattr(req.conversation, 'persona_id', None)
             full_path = await self._get_persona_file_path(event, "self_prompt.md", persona_id=persona_id)
             
             if full_path.exists() and full_path.is_file():
@@ -407,7 +407,7 @@ class MyPlugin(Star):
                     logger.info(f"Current conversation ID: {curr_cid}")
                     conv = await conv_mgr.get_conversation(uid, curr_cid)  # Conversation
                     if conv:
-                        persona_id = getattr(conv, 'persona_id', None) or None
+                        persona_id = getattr(conv, 'persona_id', None)
                         logger.info(f"Resolved persona_id from conversation: {persona_id}")
                     else:
                         logger.info("No conversation found for uid and cid")
@@ -417,8 +417,8 @@ class MyPlugin(Star):
                 logger.warning(f"Could not resolve persona_id: {e}")
         
         if not persona_id:
-            logger.info(f"No persona_id resolved, falling back to 'default' persona")
-            persona_id = "default"
+            logger.info(f"No persona_id resolved, falling back to 'prickett' persona")
+            persona_id = "prickett"
 
         return (self.memory_path / persona_id / filename).resolve()
 
