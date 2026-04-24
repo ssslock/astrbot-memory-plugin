@@ -49,6 +49,8 @@ class MyPlugin(Star):
                         req.system_prompt = ""
                     req.system_prompt += f"\n# Self Instructions\n\n{content}\n"
                     logger.info(f"Injected self instructions from {full_path}")
+            else:
+                logger.warning(f"Self-prompt file not found or not a file at {full_path}")
         except Exception as e:
             logger.error(f"Error in on_req_llm self-prompt injection: {e}")
 
